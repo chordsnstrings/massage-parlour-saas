@@ -719,6 +719,16 @@
     border-top: 1px solid var(--line);
     font-size: 13px;
   }
+  /* R48: "Owned and operated by" + the Lia97 logo */
+  .mkt-fline.mkt-fowner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mkt-fline.mkt-fowner img {
+    height: 17px;
+    width: auto;
+  }
   /* footer lines never wrap (owner 2026-10-09): columns size to their longest label */
   .mkt-fline,
   .mkt-ftag,

@@ -30,13 +30,14 @@ function cell(children, width, o = {}) {
 
 function header() {
   const sm = new ImageRun({ type: 'png', data: fs.readFileSync(path.join(DIR, 'sm-logo.png')), transformation: { width: 150, height: 58 } })
-  const labs = new ImageRun({ type: 'png', data: fs.readFileSync(path.join(DIR, 'labs-logo.png')), transformation: { width: 102, height: 14 } })
-  const left = [p(sm), p([t('Powered by  ', { size: 16, color: MUTED }), labs])]
+  const lia97 = new ImageRun({ type: 'png', data: fs.readFileSync(path.join(DIR, 'lia97-logo.png')), transformation: { width: 51, height: 15 } })
+  const left = [p(sm), p([t('Powered by  ', { size: 16, color: MUTED }), lia97])]
   const right = [
     p(t('Spa Management', { bold: true }), { align: AlignmentType.RIGHT }),
-    p(t('1997labs Tech Solutions', { bold: true }), { align: AlignmentType.RIGHT }),
+    p(t('Lia97 FZC-LLC', { bold: true }), { align: AlignmentType.RIGHT }),
+    p(t('RAKEZ, Ras Al Khaimah, UAE', { size: 17, color: MUTED }), { align: AlignmentType.RIGHT }),
     p(t('+971 50 315 3267 · +971 50 192 4021', { size: 17, color: MUTED }), { align: AlignmentType.RIGHT }),
-    p(t('ask@spamanagement.co · 1997labs.com', { size: 17, color: MUTED }), { align: AlignmentType.RIGHT }),
+    p(t('ask@spamanagement.co · spamanagement.co', { size: 17, color: MUTED }), { align: AlignmentType.RIGHT }),
   ]
   return [
     new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: [4819, 4819], borders: noBorders,
@@ -95,18 +96,18 @@ function totalRow(label, amount, o = {}) {
 const h2 = (s) => p(t(s, { bold: true, size: 24, color: GREEN }), { before: 200, after: 80 })
 const note = (s) => p(t(s, { size: 17, color: MUTED }), { before: 80, after: 80 })
 const bullet = (runs) => p(Array.isArray(runs) ? runs : [t(runs, { size: 18 })], { bullet: true, after: 30 })
-const official = () => p(t('This is an official invoice issued by 1997labs Tech Solutions (Spa Management); no stamp or signature is needed.', { size: 14, color: MUTED }), { align: AlignmentType.CENTER, before: 240 })
+const official = () => p(t('This is an official invoice issued by Lia97 FZC-LLC (Spa Management); no stamp or signature is needed.', { size: 14, color: MUTED }), { align: AlignmentType.CENTER, before: 240 })
 
 function footer() {
   return new Footer({ children: [new Paragraph({ tabStops: [{ type: TabStopType.RIGHT, position: W }], children: [
-    t('Spa Management · ask@spamanagement.co · Powered by 1997 Labs · 1997labs.com', { size: 14, color: MUTED }),
+    t('Spa Management · ask@spamanagement.co · Powered by Lia97 FZC-LLC · spamanagement.co', { size: 14, color: MUTED }),
     new TextRun({ text: '\tPage ', font: FONT, size: 14, color: MUTED }), new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 14, color: MUTED }), new TextRun({ text: ' of ', font: FONT, size: 14, color: MUTED }), new TextRun({ children: [PageNumber.TOTAL_PAGES], font: FONT, size: 14, color: MUTED }),
   ] })] })
 }
 
 function doc(children) {
   return new Document({ styles: { default: { document: { run: { font: FONT, size: 14, color: MUTED } } } },
-    creator: '1997labs Tech Solutions',
+    creator: 'Lia97 FZC-LLC',
     numbering: { config: [{ reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 240 } }, run: { size: 19, color: INK } } }] }] },
     sections: [{ properties: { page: { margin: { top: 1000, bottom: 1000, left: 1134, right: 1134 } } }, footers: { default: footer() }, children }],
   })

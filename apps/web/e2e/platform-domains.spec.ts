@@ -59,7 +59,7 @@ test('links stay on the canonical domain; an old platform domain redirects there
       'Company',
     ])
     await expect(page.locator('footer')).toContainText(
-      `© ${new Date().getFullYear()} 1997labs · spamanagement.co`,
+      `© ${new Date().getFullYear()} Lia97 FZC-LLC · spamanagement.co`,
     )
     const hrefs = await nav
       .getByRole('link')
@@ -191,7 +191,7 @@ test('search: marketing robots + sitemap, JSON-LD and social cards; app and admi
     const [settings] = await testDb().select().from(platformSettings).limit(1)
     expect(graph[0]).toMatchObject({
       name: 'spamanagement.co',
-      legalName: '1997labs',
+      legalName: 'Lia97 FZC-LLC',
       email: settings?.email || 'ask@spamanagement.co',
     })
   })

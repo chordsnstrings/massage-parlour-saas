@@ -804,8 +804,10 @@
 /* Platform badge (owner 2026-10-09): "SM Spa Management", links to the marketing site in a new tab. */
 .crm-platform {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   padding: 5px 8px;
   border-radius: 9px;
   color: var(--crm-text);
@@ -817,6 +819,19 @@
 .crm-platform-logo {
   width: auto;
   height: 28px;
+}
+/* R48: "Powered by" + the Lia97 logo under the badge */
+.crm-platform-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--crm-muted);
+  letter-spacing: 0.02em;
+}
+.crm-platform-by img {
+  height: 12px;
+  width: auto;
 }
 /* Short screens: a slightly smaller badge */
 @media (max-height: 700px) {

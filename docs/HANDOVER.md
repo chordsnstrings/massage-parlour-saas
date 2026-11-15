@@ -45,6 +45,8 @@ the existing flow.
 - **Optional "AI key" card** in Console → Settings, so the AI key (`ARK_API_KEY`) is set like the Google/Meta keys (~1.5 h).
 
 **Owner setup (no code):**
+- **Lia97 FZC-LLC (R48):** Console → Settings → Company shows the seller on app invoices: legal name Lia97 FZC-LLC,
+  address RAKEZ, Ras Al Khaimah, UAE. Meta/Google verifications made under 1997labs may need updating.
 - **Be Relax data reset (R40):** only when the owner says so (warn Be Relax first): Console → Spas → BE RELAX → "Reset spa data".
 - **Google and Meta keys:** enter the platform keys in Console → Settings, on the Google card and the Meta card
   (`docs/INTEGRATIONS.md`). Until then spas see "Not configured yet" instead of the Connect buttons.

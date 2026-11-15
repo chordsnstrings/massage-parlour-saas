@@ -373,14 +373,14 @@ describe('platformJsonLd', () => {
     const ld = platformJsonLd({
       url: 'https://spamanagement.co',
       name: 'spamanagement.co',
-      legalName: '1997labs',
+      legalName: 'Lia97 FZC-LLC',
       email: 'ask@spamanagement.co',
       logo: 'https://spamanagement.co/brand/spamanagement-logo.svg',
       description: 'Spa software',
       plans: [{ name: 'Standard', priceAed: '18000.00' }],
     }) as Graph
     expect(ld['@graph'].map((n) => n['@type'])).toEqual(['Organization', 'WebSite', 'SoftwareApplication'])
-    expect(ld['@graph'][0]).toMatchObject({ legalName: '1997labs', email: 'ask@spamanagement.co' })
+    expect(ld['@graph'][0]).toMatchObject({ legalName: 'Lia97 FZC-LLC', email: 'ask@spamanagement.co' })
     expect(ld['@graph'][2]!.offers).toEqual([
       {
         '@type': 'Offer',

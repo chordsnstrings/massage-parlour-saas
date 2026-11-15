@@ -54,6 +54,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   keeps the old `134-209-145-162.sslip.io` address working (B1; steps: deploy/droplet/README.md "Move to spamanagement.co").
   **The only spamanagement.co email address anywhere (site, legal pages, default sender, ops contacts) is
   `ask@spamanagement.co`** (owner 2026-10-09).
+  **Platform company = Lia97 FZC-LLC**, RAKEZ, Ras Al Khaimah, UAE (owner 2026-11-15, R48; was 1997labs): footer, legal pages,
+  JSON-LD, CRM badge "Powered by" + `public/brand/lia97-logo.svg`, hand-made invoices (`docs/billing`).
 - **Booking ↔ sale = one order (R32, owner 2026-10-14):** fee = `booking_items.price_aed`, planned commission
   (`booking_items.commission_aed`) off the ledger until Finish (`finishBooking` = sale + commission, one tx); corrections
   = void + re-create on the same business date; closed days change only with `pos.correct` (owners/managers, audited,
