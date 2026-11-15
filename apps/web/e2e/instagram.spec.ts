@@ -24,7 +24,9 @@ test('Instagram: not-configured card, inbox with an AI draft, take over and repl
   await page.goto(`${app}/${slug}/settings/integrations`)
   const card = page.getByTestId('instagram-card')
   await expect(card.getByText('Not configured yet')).toBeVisible()
-  await expect(card.getByText('META_APP_SECRET')).toBeVisible()
+  // Spa users see where the keys are added, never the server's variable names.
+  await expect(card.getByText(/adds the keys in Console → Settings/)).toBeVisible()
+  await expect(card.getByText(/META_[A-Z_]+/)).toHaveCount(0)
   await page.goto(`${app}/${slug}/inbox`)
   await expect(page.getByText('Connect Instagram to start')).toBeVisible()
 

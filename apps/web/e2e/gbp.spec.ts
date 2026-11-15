@@ -74,7 +74,8 @@ test('Google Business Profile: not-configured card, synced reviews, filters, app
   const card = page.getByTestId('gbp-card')
   await expect(card.getByRole('heading', { name: 'Google Business Profile' })).toBeVisible()
   await expect(card.getByText('Not configured yet')).toBeVisible()
-  await expect(card.getByText('GOOGLE_CLIENT_ID')).toBeVisible()
+  await expect(card.getByText(/adds the keys in Console → Settings/)).toBeVisible()
+  await expect(card.getByText(/GOOGLE_CLIENT_/)).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Connect Google' })).toHaveCount(0)
 
   await seedGoogle(slug)
