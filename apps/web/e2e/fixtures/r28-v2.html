@@ -1,0 +1,1585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{{spa_name}}</title><meta name="description" content="{{spa_name}} — massage and spa treatments. Book a session or message us on WhatsApp.">
+<meta name="crm-endpoint" content="crm-data.json">
+<script>/* theme before first paint: dark by default, the visitor's saved choice wins */
+(function(){var t=null;try{t=localStorage.getItem('spa-theme');}catch(e){}document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');})();</script>
+<!--
+  CANDLELIGHT v2 — spa website template, CRM data contract v2 (R28; docs: CRM data contract §9). Vanilla HTML/CSS/JS,
+  no external libraries, light and dark themes. One file for every spa: nothing a visitor reads is fixed here.
+  Business values come from the spa's CRM, every interface text from CRM_DATA.ui (English + Arabic, editable per spa),
+  and the defaults in the literal are neutral ("Your Spa", no contact details, no team).
+
+  CRM ATTRIBUTE FORMAT (site-builder spec)
+    data-service-title|-duration|-description|-price="[service-id]"   service name, lengths, description, price
+    data-crm="working-hours|operating-days|phone|address|…"            CRM values (data-phone="[phone-index]" picks one)
+    href="[crm-whatsapp-link]" / "[crm-booking-url]" / "[crm-maps-link]", action="[crm-booking-endpoint]"
+    data-staff="[staff-id]"                  a team member card (shown only with a photo)
+    data-crm-text="ui.nav.book"              the element's text from that CRM_DATA path (a missing key keeps the markup)
+    data-crm-attr="aria-label:ui.aria.x"     attributes from CRM_DATA paths ("attr:path; attr:path")
+    data-crm-tpl                             with data-crm-text: {days} and {hours} filled in
+    data-if="<key>"                          hidden while that value or list is empty
+  Extra keys in the data-crm="key" form: spa-name, city, booking-label, year, live-status, address-line1,
+    hours-varies, has-hours; data-crm-src="logo-on-dark|logo-on-light"; repeated blocks use data-crm-list + <template>,
+    with item fields as data-item, data-item-src, data-item-alt, data-item-copy and data-if.
+
+  CRM JSON structure (locale "en" | "ar" is written by the platform, never in this file):
+    contract{version 2, locales, fields, l10n{ar}}   the manifest: English-only fields, reviewed Arabic defaults
+    spa{name, short_name, area_label, logo_on_dark, logo_on_light, timezone, currency?, experience[]{id,title,text},
+        experience_image, experience_image_alt}
+    journey[]{id,label,image,focus,accent,eyebrow,title,body,tags[],cta,clip,clipMobile}   ({area} {hours} {city})
+    contact{whatsapp_number, whatsapp_message, phones[]{number,display,label,whatsapp,calls}}
+    location{address_line1, address_line2, city, country, maps_url}
+    hours[]{day,open,close,closed}      booking{url,label,form_endpoint,image,image_alt}
+    services[]{id,name,note,description,durations[],price,image,image_alt}
+    staff[]{id,name,specialty,photo,photo_alt}
+    ui{nav, aria, hint, cta, sections, services, staff, contact, hours, form, wa}   {tokens} are filled by the script
+  locale "ar" sets only <html lang> (the layout stays as built); Arabic glyphs use the CL Arabic faces.
+
+  Booking form POST body (application/json):
+    {spa, service_id, service_name, duration_minutes, guests, date "YYYY-MM-DD", time "HH:MM", staff_id,
+     name, phone, notes, source:"website", submitted_at (ISO 8601)}
+
+  Scroll journey adapted from the scroll-world scrub engine (github.com/oso95/scroll-world, MIT, (c) 2026 cyw).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Arabic glyphs (locale "ar"): Noto Naskh Arabic and IBM Plex Sans Arabic (SIL OFL 1.1) under CL aliases, Arabic code points only; the Latin faces stay first in every stack */
+@font-face{font-family:"CL Arabic Display";font-style:normal;font-weight:400 700;font-display:swap;src:url(https://fonts.gstatic.com/s/notonaskharabic/v44/RrQ5bpV-9Dd1b1OAGA6M9PkyDuVBePeKNaxcsss0Y7bwj85Urqcyx_M.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+FB50-FDFF,U+FE70-FEFF}
+@font-face{font-family:"CL Arabic Text";font-style:normal;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3CZRtWPQCuHme67tEYUIx3Kh0PHR9N6Ys43PWrfQ.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+FB50-FDFF,U+FE70-FEFF}
+@font-face{font-family:"CL Arabic Text";font-style:normal;font-weight:500;font-display:swap;src:url(https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPO_-CRXMR5Kw.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+FB50-FDFF,U+FE70-FEFF}
+@font-face{font-family:"CL Arabic Text";font-style:normal;font-weight:600;font-display:swap;src:url(https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPi-OCRXMR5Kw.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-08FF,U+FB50-FDFF,U+FE70-FEFF}
+/* Layout: a pinned scroll journey through the spa's rooms, then calm sections floating over a slow candle-light background. */
+:root{
+  --bg:#f4ede4;
+  --surface:#ebe1d4;
+  --panel:rgba(244,237,228,.8);
+  --field:#fbf7f1;
+  --fg:#241a13;
+  --muted:#6d5a49;
+  --line:rgba(36,26,19,.14);
+  --accent:#a95f27;
+  --accent-hi:#94511e;
+  --accent-text:#8f4f1c;
+  --glow:#e9a95a;
+  --ink-on-accent:#fff8ef;
+  --ok:#3f7a52;
+  --err:#a8402c;
+  --wa:#1d5c45;
+  --wa-tint:rgba(29,92,69,.08);
+  --veil:rgba(244,237,228,.66);
+  --veil-strong:rgba(244,237,228,.9);
+  --tint:rgba(36,26,19,.05);
+  --nav-bg:rgba(244,237,228,.86);
+  --skeleton:rgba(36,26,19,.08);
+  --shadow:rgba(36,26,19,.28);
+  --vignette:rgba(36,26,19,.16);
+  --amb-1:232,160,84;
+  --amb-2:222,138,118;
+  --amb-3:214,176,120;
+  --amb-mote:176,98,40;
+  --amb-alpha:.5;
+  --amb-line:.42;
+  --show-on-dark:none;
+  --show-on-light:block;
+  --display:"Marcellus","CL Arabic Display","Cormorant Garamond",Georgia,serif;
+  --body:"Figtree","CL Arabic Text","Segoe UI",system-ui,sans-serif;
+  --mono:"DM Mono","CL Arabic Text",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --gutter:clamp(16px,4vw,56px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#17110d;--surface:#211812;--panel:rgba(30,22,17,.8);--field:#1c1510;--fg:#f3e9dc;--muted:#bba996;--line:rgba(243,233,220,.14);
+    --accent:#c27b3f;--accent-hi:#d08a4c;--accent-text:#f3c27c;--glow:#f3c27c;--ink-on-accent:#fff8ef;--ok:#8fc79e;--err:#f0a08c;--wa:#6fbf96;--wa-tint:rgba(111,191,150,.10);
+    --veil:rgba(23,17,13,.55);--veil-strong:rgba(23,17,13,.86);
+    --tint:rgba(243,233,220,.06);--nav-bg:rgba(23,17,13,.82);--skeleton:rgba(243,233,220,.10);--shadow:rgba(0,0,0,.7);--vignette:rgba(8,5,3,.55);
+    --amb-1:243,194,124;--amb-2:194,123,63;--amb-3:140,90,55;--amb-mote:243,214,170;--amb-alpha:.18;--amb-line:.16;
+    --show-on-dark:block;--show-on-light:none;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17110d;--surface:#211812;--panel:rgba(30,22,17,.8);--field:#1c1510;--fg:#f3e9dc;--muted:#bba996;--line:rgba(243,233,220,.14);
+  --accent:#c27b3f;--accent-hi:#d08a4c;--accent-text:#f3c27c;--glow:#f3c27c;--ink-on-accent:#fff8ef;--ok:#8fc79e;--err:#f0a08c;--wa:#6fbf96;--wa-tint:rgba(111,191,150,.10);
+  --veil:rgba(23,17,13,.55);--veil-strong:rgba(23,17,13,.86);
+  --tint:rgba(243,233,220,.06);--nav-bg:rgba(23,17,13,.82);--skeleton:rgba(243,233,220,.10);--shadow:rgba(0,0,0,.7);--vignette:rgba(8,5,3,.55);
+  --amb-1:243,194,124;--amb-2:194,123,63;--amb-3:140,90,55;--amb-mote:243,214,170;--amb-alpha:.18;--amb-line:.16;
+  --show-on-dark:block;--show-on-light:none;color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased;transition:background .4s,color .4s}
+body.locked{overflow:hidden}
+img{display:block;max-width:100%}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent-text);outline-offset:3px;border-radius:6px}
+.mono{font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;color:var(--muted)}
+.wrap{padding-inline:var(--gutter);max-width:1240px;margin-inline:auto}
+h1,h2,h3{font-family:var(--display);font-weight:400;text-wrap:balance;margin:0;letter-spacing:.01em}
+h2{font-size:clamp(2rem,4.4vw,3.4rem);line-height:1.08}
+p{margin:0}
+.on-dark{display:var(--show-on-dark)}
+.on-light{display:var(--show-on-light)}
+
+#ambient{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.crm-loading [data-crm]:empty::before{content:"";display:inline-block;width:7em;max-width:100%;height:.8em;border-radius:6px;background:var(--skeleton);animation:pulse 1.4s ease-in-out infinite;vertical-align:middle}
+@keyframes pulse{50%{opacity:.4}}
+.crm-error{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);z-index:90;background:var(--surface);color:var(--fg);border:1px solid var(--accent);border-radius:14px;padding:12px 18px;max-width:calc(100% - 32px)}
+
+/* ---------- top bar ---------- */
+.nav{position:fixed;inset:0 0 auto 0;z-index:70;padding:calc(env(safe-area-inset-top,0px) + 14px) var(--gutter) 14px;display:flex;align-items:center;justify-content:space-between;gap:20px;background:none;border:0}
+.nav a,.nav .live{text-shadow:0 1px 12px color-mix(in srgb,var(--bg) 70%,transparent)}
+.brand{flex:none}
+.brand img{height:68px;width:auto}
+.nav-links{display:flex;gap:4px;list-style:none;margin:0;padding:0}
+.nav-links a{display:block;text-decoration:none;font-size:1.02rem;padding:11px 20px;border-radius:999px;color:var(--fg);opacity:.82;transition:background .3s,color .3s,opacity .3s;white-space:nowrap}
+.nav-links a:hover{opacity:1}
+.nav-links a.active{opacity:1;background:var(--accent);color:var(--ink-on-accent)}
+.nav-right{display:flex;align-items:center;gap:12px;flex:none}
+.live{display:inline-flex;align-items:center;gap:9px;font:500 .86rem var(--mono);letter-spacing:.03em;padding:12px 6px;color:var(--fg);white-space:nowrap}
+.live::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.live.open::before{background:var(--glow);box-shadow:0 0 10px var(--glow);animation:breathe 3.2s ease-in-out infinite}
+@keyframes breathe{50%{transform:scale(1.5);opacity:.6}}
+.icon-btn{width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);flex:none}
+.icon-btn:hover{border-color:var(--accent-text)}
+.icon-btn svg{width:21px;height:21px}
+.icon-btn .on-dark,.icon-btn .on-light{grid-area:1/1}
+.menu-btn{display:none}
+.pill{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;font-size:.95rem;border:1px solid var(--line);background:var(--tint);color:var(--fg);cursor:pointer;transition:background .25s,border-color .25s,transform .25s;font-family:var(--body);white-space:nowrap}
+.pill:hover{border-color:var(--accent-text);transform:translateY(-1px)}
+.pill.solid{background:var(--accent);border-color:var(--accent);color:var(--ink-on-accent)}
+.pill.solid:hover{background:var(--accent-hi)}
+.pill svg{width:20px;height:20px;flex:none}
+.nav .pill{padding:15px 26px;font-size:1.04rem}
+
+.sheet{position:fixed;inset:0;z-index:80;background:var(--bg);padding:calc(env(safe-area-inset-top,0px) + 20px) var(--gutter) calc(env(safe-area-inset-bottom,0px) + 24px);display:flex;flex-direction:column;gap:28px;overflow-y:auto}
+.sheet-top{display:flex;justify-content:space-between;align-items:center}
+.sheet-top img{height:52px;width:auto}
+.sheet nav{display:grid;gap:4px}
+.sheet nav a{font-family:var(--display);font-size:2.1rem;text-decoration:none;padding:6px 0;border-bottom:1px solid var(--line)}
+.sheet .foot{display:grid;gap:14px;margin-top:auto}
+
+/* ---------- scroll journey (scroll-world engine theme) ---------- */
+.sw-root{--sw-bg:var(--bg);--sw-ink:var(--fg);--sw-ink-soft:var(--muted);--sw-font-display:var(--display);--sw-font-body:var(--body)}
+.sw-scrollbar{display:none!important}
+.sw-copy__num{font-family:var(--mono)!important;color:var(--muted)!important}
+.sw-copy__eyebrow{font-family:var(--mono)!important;font-weight:500!important;font-size:clamp(.88rem,1.05vw,1.05rem)!important;letter-spacing:.08em!important;text-transform:none!important;color:var(--accent-text)!important}
+.sw-copy__title{font-weight:400!important;letter-spacing:.005em!important}
+.sw-copy:first-child .sw-copy__title{animation:blurIn 1.2s cubic-bezier(.2,.7,.2,1) both}
+.sw-copy:first-child .sw-copy__body{animation:blurIn 1.2s .5s both}
+.sw-copy__body{color:var(--muted)!important}
+.sw-copy__tags li{font-family:var(--mono)!important;font-weight:500!important;background:var(--veil-strong)!important;color:var(--fg)!important;border-color:var(--line)!important}
+.sw-btn--primary{background:var(--accent)!important;color:var(--ink-on-accent)!important}
+.sw-btn--ghost{color:var(--fg)!important;border-color:var(--line)!important;background:var(--veil)}
+.sw-route__label{background:var(--veil-strong)!important;color:var(--fg)!important;font-family:var(--body)}
+.sw-hint{color:var(--fg)!important}
+@keyframes blurIn{from{opacity:0;filter:blur(14px);transform:translateY(14px)}to{filter:blur(0);transform:none}}
+.sw-scene__frame{position:absolute;inset:0;overflow:hidden}
+.sw-scene:not(.is-portrait) .sw-scene__still{transform-origin:50% 0!important}
+@media (max-width:860px){
+  .sw-scene .sw-scene__still{transform-origin:50% 0!important}
+  .sw-scene .sw-scene__frame{bottom:auto;height:62svh;-webkit-mask-image:linear-gradient(#000 72%,transparent);mask-image:linear-gradient(#000 72%,transparent)}
+  .sw-copylayer::before{height:46%!important}
+}
+/* phone/tablet: landscape scenes (the team hero) show the whole photo, never a crop */
+@media (max-width:860px){
+  .sw-scene:not(.is-portrait) .sw-scene__frame{top:calc(var(--nav-h,0px) * .5);left:0;right:0;bottom:auto;height:auto;aspect-ratio:7/6;-webkit-mask-image:linear-gradient(transparent,#000 9%,#000 74%,transparent);mask-image:linear-gradient(transparent,#000 9%,#000 74%,transparent)}
+  .sw-scene:not(.is-portrait) .sw-scene__still{object-fit:cover!important;object-position:88% 50%!important;transform-origin:62% 40%!important}
+}
+
+.sw-scene__aura{display:none}
+/* Portrait photos on wide screens: the person in a large lit panel, the live background moving softly behind */
+@media (min-width:861px){
+  .sw-scene.is-portrait .sw-scene__aura{display:block;position:absolute;inset:0;pointer-events:none}
+  .sw-scene.is-portrait .sw-scene__aura::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 72% 50%,transparent 38%,var(--vignette) 100%)}
+  .aura-spot{position:absolute;top:50%;right:calc(clamp(56px,6vw,170px) + min(84vh,980px) * .4 - 42vh);width:84vh;height:84vh;border-radius:50%;transform:translate(0,-50%);background:radial-gradient(circle,color-mix(in srgb,var(--sw-accent) 55%,transparent) 0%,color-mix(in srgb,var(--sw-accent) 18%,transparent) 42%,transparent 70%);filter:blur(10px);animation:spotBreathe 7s ease-in-out infinite}
+  .aura-ring{position:absolute;top:50%;right:calc(clamp(56px,6vw,170px) + min(84vh,980px) * .4 - 50vh);width:100vh;height:100vh;border-radius:50%;transform:translateY(-50%);background:conic-gradient(from 0deg,transparent 0deg,color-mix(in srgb,var(--sw-accent) 45%,transparent) 50deg,transparent 110deg,transparent 200deg,color-mix(in srgb,var(--glow) 40%,transparent) 250deg,transparent 320deg);-webkit-mask:radial-gradient(circle,transparent 54%,#000 55%,#000 58%,transparent 59%);mask:radial-gradient(circle,transparent 54%,#000 55%,#000 58%,transparent 59%);opacity:.7;animation:ringSpin 26s linear infinite}
+  .aura-ring.two{width:116vh;height:116vh;right:calc(clamp(56px,6vw,170px) + min(84vh,980px) * .4 - 58vh);opacity:.35;animation-duration:40s;animation-direction:reverse}
+  .sw-scene.is-portrait .sw-scene__frame{inset:auto;top:calc(50% + var(--nav-h,0px) / 2);right:clamp(56px,6vw,170px);height:min(calc(100vh - var(--nav-h,0px) - 56px),980px);aspect-ratio:4/5;max-width:46vw;border-radius:30px;border:1px solid rgba(255,248,239,.28);box-shadow:0 60px 120px -40px rgba(0,0,0,.65),0 0 0 8px color-mix(in srgb,var(--sw-accent) 12%,transparent),0 0 120px -10px color-mix(in srgb,var(--sw-accent) 55%,transparent);transform:translateY(-50%);will-change:transform;z-index:2}
+}
+@keyframes spotBreathe{0%,100%{opacity:.75;transform:translate(0,-50%) scale(1)}50%{opacity:1;transform:translate(0,-50%) scale(1.08)}}
+@keyframes ringSpin{to{transform:translateY(-50%) rotate(360deg)}}
+.sw-root .sw-copy__title{font-size:clamp(2.6rem,min(6.4vw,9.5vh),6.4rem);margin:14px 0 0;line-height:1.02!important}
+.sw-root .sw-copy__body{margin-top:24px;font-size:clamp(1.12rem,1.55vw,1.45rem);line-height:1.55}
+@media (max-width:1280px){.sw-route__label{display:none!important}}
+@media (max-height:820px) and (min-width:861px){.sw-hint{display:none!important}.sw-root .sw-copy__body{font-size:clamp(1rem,1.3vw,1.2rem);margin-top:16px}}
+@media (max-width:600px){.sw-route{display:none!important}}
+@media (max-width:860px){
+  .sw-root .sw-copy__title{font-size:clamp(2.5rem,11vw,3.6rem)}
+  .sw-root .sw-copy__body{margin-top:14px;font-size:clamp(1.05rem,4.2vw,1.2rem)}
+  .sw-root .sw-copy{bottom:calc(clamp(110px,17dvh,160px) + env(safe-area-inset-bottom))}
+}
+
+/* ---------- sections after the journey ---------- */
+.after{position:relative;z-index:30;overflow-x:clip}
+section{padding-block:clamp(72px,10vw,140px)}
+.eyebrow{display:block;margin-bottom:18px;color:var(--accent-text)}
+.lede{color:var(--muted);max-width:34rem;margin-top:18px}
+.rv{transform:perspective(1000px) rotateX(10deg) translateY(56px);opacity:.3}
+.rv-on{transition:transform 1.1s cubic-bezier(.2,.75,.2,1),opacity 1.1s ease}
+
+.treat-head{margin-bottom:44px}
+.treat-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.9fr);gap:clamp(24px,4vw,56px);align-items:stretch}
+.treat-visual{position:relative;min-height:100%;border-radius:22px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.treat-visual img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 50%;transition:opacity .7s,filter .7s,transform 1.2s}
+.treat-visual img.off{opacity:0;filter:blur(16px);transform:scale(1.06)}
+.treat-list{list-style:none;margin:0;padding:0 18px;border-radius:22px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.treat-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:16px 28px;align-items:center;padding:22px 0;border-top:1px solid var(--line);transition:padding .35s}
+.treat-row:first-child{border-top:0}
+.treat-row:hover,.treat-row.active{padding-left:12px}
+.treat-row .svc{font-family:var(--display);font-size:clamp(1.2rem,2vw,1.55rem);line-height:1.2;display:block;transition:color .3s}
+.treat-row.active .svc{color:var(--accent-text)}
+.svc-note{display:block;margin-top:4px}
+.svc-desc{display:block;margin-top:6px;color:var(--muted);font-size:.92rem;max-width:30rem}
+.svc-price{display:block;margin-top:6px;font:500 .82rem var(--mono);color:var(--accent-text)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.chip{font:500 .74rem var(--mono);letter-spacing:.04em;padding:6px 10px;border-radius:999px;border:1px solid var(--line);color:var(--fg);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ask{font:400 .74rem var(--mono);color:var(--muted);letter-spacing:.04em}
+.book-link{font-weight:600;font-size:.88rem;text-decoration:none;color:var(--accent-text);white-space:nowrap;padding:8px 0}
+.book-link:hover{text-decoration:underline}
+
+.exp-grid{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:clamp(24px,4vw,56px);align-items:stretch;margin-top:44px}
+.exp-photo{margin:0;position:relative;border-radius:26px;overflow:hidden;border:1px solid var(--line);aspect-ratio:4/5;align-self:center;width:100%;background:var(--surface);box-shadow:0 40px 80px -40px var(--shadow)}
+.exp-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 50%;transform-origin:50% 50%;animation:slowZoom 18s ease-in-out infinite alternate}
+@keyframes slowZoom{from{transform:scale(1)}to{transform:scale(1.07)}}
+.exp-grid .steps{margin:0;grid-template-columns:1fr;gap:16px;padding-left:34px;align-content:center}
+.exp-grid .steps::before{left:9px;right:auto;top:30px;bottom:30px;width:1px;height:auto}
+.exp-grid .steps::after{left:6px;top:30px;animation:travelY 9s ease-in-out infinite}
+@keyframes travelY{0%{top:30px}50%{top:calc(100% - 37px)}100%{top:30px}}
+.exp-grid .step{grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:start}
+.exp-grid .step-num{font-size:2.6rem}
+.hud-photo{margin:0 0 6px;border-radius:20px;overflow:hidden;border:1px solid var(--line);aspect-ratio:4/5;max-height:440px;width:100%;box-shadow:0 30px 60px -36px var(--shadow)}
+.hud-photo img{width:100%;height:100%;object-fit:cover;object-position:50% 50%;transform-origin:50% 50%;animation:slowZoom 16s ease-in-out infinite alternate}
+.steps{list-style:none;margin:64px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;position:relative}
+.steps::before{content:"";position:absolute;left:8%;right:8%;top:-26px;height:1px;background:var(--line)}
+.steps::after{content:"";position:absolute;top:-29px;left:8%;width:7px;height:7px;border-radius:50%;background:var(--glow);box-shadow:0 0 14px var(--glow);animation:travel 9s ease-in-out infinite}
+@keyframes travel{0%{left:8%}50%{left:calc(92% - 7px)}100%{left:8%}}
+.step{position:relative;padding:24px;border-radius:20px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;gap:10px;align-content:start}
+.step-num{font-family:var(--display);font-size:2.2rem;line-height:1;color:var(--accent-text)}
+.step h3{font-size:1.45rem}
+.step p{color:var(--muted)}
+
+/* team: large drifting 3D carousel */
+.team-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:20px;margin-bottom:20px}
+.orbit{position:relative;overflow:hidden;perspective:1800px;perspective-origin:50% 45%;padding-block:40px 60px;cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none;mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.orbit.dragging{cursor:grabbing}
+.orbit-track{display:flex;gap:28px;width:max-content;transform-style:preserve-3d;will-change:transform}
+.tcard{flex:none;width:clamp(250px,27vw,420px);aspect-ratio:4/5;margin:0;border-radius:26px;overflow:hidden;border:1px solid var(--line);position:relative;background:var(--surface);box-shadow:0 34px 70px -34px var(--shadow);will-change:transform;backface-visibility:hidden}
+.tcard img{width:100%;height:100%;object-fit:cover;object-position:50% 50%;pointer-events:none}
+.tcard figcaption{position:absolute;left:14px;right:14px;bottom:14px;padding:12px 14px;border-radius:14px;background:var(--veil-strong);color:var(--fg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:grid}
+.tcard figcaption b{font-family:var(--display);font-weight:400;font-size:1.15rem}
+.orbit-ctrl{display:flex;gap:10px}
+.orbit-ctrl button{width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;font-size:1.15rem}
+.orbit-ctrl button:hover{border-color:var(--accent-text)}
+.orbit.static{overflow-x:auto;cursor:auto;mask-image:none;-webkit-mask-image:none}
+.orbit.static .orbit-track{padding-inline:var(--gutter)}
+
+/* booking panel + form */
+.hud{position:relative;border-radius:28px;padding:clamp(24px,4.5vw,60px);background:radial-gradient(120% 140% at 0% 0%,rgba(233,169,90,.18),transparent 55%),var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:clamp(28px,5vw,64px);align-items:start;isolation:isolate}
+.hud::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;background:conic-gradient(from var(--a,0deg),rgba(233,169,90,.08),rgba(233,169,90,.95),rgba(169,95,39,.25),rgba(233,169,90,.08) 60%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;z-index:-1;animation:spin 8s linear infinite;pointer-events:none}
+@property --a{syntax:"<angle>";inherits:false;initial-value:0deg}
+@keyframes spin{to{--a:360deg}}
+.hud .corner{position:absolute;width:18px;height:18px;border-color:var(--accent-text);border-style:solid;opacity:.8;pointer-events:none}
+.c1{top:14px;left:14px;border-width:1.5px 0 0 1.5px}.c2{top:14px;right:14px;border-width:1.5px 1.5px 0 0}.c3{bottom:14px;left:14px;border-width:0 0 1.5px 1.5px}.c4{bottom:14px;right:14px;border-width:0 1.5px 1.5px 0}
+.bform{margin-top:28px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 18px}
+.field{display:grid;gap:6px;min-width:0;align-content:start}
+.field.full{grid-column:1/-1}
+.field label,.field .lbl{font:500 .74rem var(--mono);letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.field input:not([type=radio]),.field select,.field textarea{width:100%;font:inherit;font-size:1rem;color:var(--fg);background:var(--field);border:1px solid var(--line);border-radius:14px;padding:13px 14px;transition:border-color .2s,box-shadow .2s;appearance:none;-webkit-appearance:none}
+.field select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 20px) 55%,calc(100% - 14px) 55%;background-size:6px 6px;background-repeat:no-repeat;padding-right:38px}
+.field select:disabled{opacity:.6}
+.field textarea{min-height:92px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent-text);box-shadow:0 0 0 3px rgba(233,169,90,.25)}
+.field.bad input,.field.bad select{border-color:var(--err)}
+.field .err{font-size:.82rem;color:var(--err)}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg label{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:999px;border:1px solid var(--line);background:var(--field);cursor:pointer;font:500 .92rem var(--body);color:var(--fg);text-transform:none;letter-spacing:0}
+.seg input{accent-color:var(--accent);width:18px;height:18px;margin:0;appearance:auto;-webkit-appearance:auto;flex:none}
+.seg label:has(input:checked){border-color:var(--accent-text);background:var(--tint)}
+.form-foot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:4px}
+.form-foot .pill.solid{padding:15px 28px;font-size:1rem}
+.form-note{font-size:.86rem;color:var(--muted)}
+.form-status{grid-column:1/-1;border-radius:16px;padding:16px 18px;border:1px solid var(--line);background:var(--field);display:grid;gap:10px}
+.form-status.ok{border-color:var(--ok)}
+.form-status.fail{border-color:var(--err)}
+.form-status b{font-family:var(--display);font-weight:400;font-size:1.3rem}
+.contact-col{display:grid;gap:14px}
+.nums{display:grid;gap:12px}
+.num{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--bg)}
+.num div{min-width:0}
+.num b{display:block;font-size:1.2rem;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:.02em;user-select:all}
+.copy{border:1px solid var(--line);background:none;color:var(--fg);border-radius:999px;padding:7px 12px;font:500 .72rem var(--mono);cursor:pointer;white-space:nowrap}
+.copy:hover{border-color:var(--accent-text)}
+.wa-list{display:grid;gap:10px}
+
+.visit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:22px;overflow:hidden}
+.visit > div{background:var(--panel);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:clamp(22px,3vw,36px);display:grid;gap:10px;align-content:start}
+.visit h3{font-size:1.5rem}
+.visit p{color:var(--muted)}
+.map-link{display:inline-flex;align-items:center;gap:10px;margin-top:6px;padding:12px 18px;border-radius:999px;background:var(--accent);color:var(--ink-on-accent);text-decoration:none;font-weight:600;width:max-content;max-width:100%}
+.map-link:hover{background:var(--accent-hi)}
+.map-link svg{width:18px;height:18px}
+.big{font-family:var(--display);font-size:clamp(2rem,3.4vw,2.8rem);line-height:1}
+.call-list{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:14px}
+.call-list li{display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.call-list li:last-of-type{border-bottom:0;padding-bottom:0}
+.call-list li > div{display:grid;gap:2px;min-width:0}
+.call-list b{font-family:var(--display);font-weight:400;font-size:1.45rem;font-variant-numeric:tabular-nums;color:var(--fg)}
+.wa-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;text-decoration:none;font-weight:600;font-size:.88rem;white-space:nowrap}
+.wa-btn svg{width:17px;height:17px;color:var(--wa);transition:color .25s}
+.wa-list .pill,.wa-btn{background:var(--wa-tint);border:1.5px solid var(--wa);color:var(--fg);box-shadow:0 0 0 4px var(--wa-tint);transition:background .25s,color .25s,transform .25s}
+.wa-list .pill::before{content:"";width:19px;height:19px;flex:none;background:var(--wa);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3Z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3Z'/%3E%3C/svg%3E") center/contain no-repeat;transition:background .25s}
+.wa-list .pill:hover,.wa-btn:hover{background:var(--wa);border-color:var(--wa);color:#fff}
+.wa-list .pill:hover::before{background:#fff}
+.wa-btn:hover svg{color:#fff}
+.hours-list{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.hours-list li{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hours-list li b{color:var(--fg);font-weight:500}
+.status{display:inline-flex;align-items:center;gap:8px}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.status.open::before{background:var(--glow);box-shadow:0 0 10px var(--glow)}
+
+footer{border-top:1px solid var(--line);padding-block:36px;margin-top:40px;background:var(--panel)}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:18px}
+footer img{height:48px;width:auto}
+
+@media (max-width:1360px){ .live{display:none} .nav-links a{padding:10px 16px;font-size:.96rem} }
+@media (max-width:1100px){
+  .nav-links,.nav .pill{display:none}
+  .menu-btn{display:grid}
+}
+@media (max-width:860px){
+  .brand img{height:48px}
+  .icon-btn{width:46px;height:46px}
+  .treat-body{grid-template-columns:1fr}
+  .treat-visual{position:relative;top:0;aspect-ratio:16/10;min-height:0}
+  .steps{grid-template-columns:1fr}
+  .steps::before,.steps::after{display:none}
+  .exp-grid{grid-template-columns:1fr}
+  .exp-photo{min-height:0;aspect-ratio:4/5;max-height:70vh}
+  .exp-grid .steps{padding-left:0}
+  .hud{grid-template-columns:1fr}
+  .visit{grid-template-columns:1fr}
+  .tcard{width:min(74vw,340px)}
+}
+@media (max-width:620px){
+  .treat-row{grid-template-columns:minmax(0,1fr) auto}
+  .treat-row .chips{grid-column:1/-1;grid-row:2;justify-content:flex-start}
+  .treat-row:hover,.treat-row.active{padding-left:0}
+  .bform{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .rv{transform:none;opacity:1}
+}
+
+/* ---------- contract v2 ---------- */
+/* a spa without hours, an address or phones: the find-us panel closes up instead of showing an empty column */
+@media (min-width:861px){
+  .visit:has(> div[hidden]){grid-template-columns:repeat(2,minmax(0,1fr))}
+  .visit:has(> div[hidden] ~ div[hidden]){grid-template-columns:minmax(0,1fr)}
+}
+.visit:not(:has(> div:not([hidden]))){display:none}
+/* Arabic (locale "ar", owner D3: the same layout, never RTL): no letter-spacing (it breaks the joined script);
+   each text takes its own direction (punctuation, "11 ص – 2 ص", "45 دقيقة") but keeps the layout's order and
+   alignment; the "// label" eyebrows stay as drawn */
+html:lang(ar) .mono,html:lang(ar) h1,html:lang(ar) h2,html:lang(ar) h3,html:lang(ar) .live,html:lang(ar) .chip,html:lang(ar) .ask,html:lang(ar) .field label,html:lang(ar) .field .lbl,html:lang(ar) .num b,html:lang(ar) .sw-copy__num,html:lang(ar) .sw-hint{letter-spacing:0}
+html:lang(ar) .sw-copy__eyebrow,html:lang(ar) .sw-copy__title{letter-spacing:0!important}
+html:lang(ar) body{text-align:left}
+html:lang(ar) :is(h1,h2,h3,p,li,label,figcaption,b,span,a,button,select,option):not(.eyebrow,.sw-copy__eyebrow){unicode-bidi:plaintext}
+</style>
+</head>
+<body style="margin:0">
+
+<canvas id="ambient" aria-hidden="true"></canvas>
+
+<div class="crm-root crm-loading" id="crmRoot">
+<header class="nav" id="nav">
+  <a class="brand" href="#top" data-crm-aria="spa-name">
+    <img class="on-dark" data-crm-src="logo-on-dark" alt="">
+    <img class="on-light" data-crm-src="logo-on-light" alt="">
+  </a>
+  <ul class="nav-links" id="navLinks">
+    <li><a href="#top" data-spy="top" data-crm-text="ui.nav.journey">Journey</a></li>
+    <li data-if="services"><a href="#treatments" data-spy="treatments" data-crm-text="ui.nav.treatments">Treatments</a></li>
+    <li data-if="experience"><a href="#experience" data-spy="experience" data-crm-text="ui.nav.visit">Your visit</a></li>
+    <li data-if="staff"><a href="#team" data-spy="team" data-crm-text="ui.nav.team">Our team</a></li>
+    <li><a href="#book" data-spy="book" data-crm-text="ui.nav.book">Book</a></li>
+    <li><a href="#visit" data-spy="visit" data-crm-text="ui.nav.find">Find us</a></li>
+  </ul>
+  <div class="nav-right">
+    <span class="live" data-crm="live-status"></span>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch light or dark theme" data-crm-attr="aria-label:ui.aria.theme">
+      <svg class="on-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+      <svg class="on-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+    </button>
+    <a class="pill solid" href="[crm-booking-url]">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+      <span data-crm="booking-label"></span>
+    </a>
+    <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false" data-crm-attr="aria-label:ui.aria.menu_open">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-top">
+    <span><img class="on-dark" data-crm-src="logo-on-dark" alt=""><img class="on-light" data-crm-src="logo-on-light" alt=""></span>
+    <button class="icon-btn" id="sheetClose" type="button" aria-label="Close menu" data-crm-attr="aria-label:ui.aria.menu_close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <nav aria-label="Sections" data-crm-attr="aria-label:ui.nav.sections">
+    <a href="#top" data-crm-text="ui.nav.journey">Journey</a><a href="#treatments" data-if="services" data-crm-text="ui.nav.treatments">Treatments</a><a href="#experience" data-if="experience" data-crm-text="ui.nav.visit">Your visit</a><a href="#team" data-if="staff" data-crm-text="ui.nav.team">Our team</a><a href="#book" data-crm-text="ui.nav.book">Book</a><a href="#visit" data-crm-text="ui.nav.find">Find us</a>
+  </nav>
+  <div class="foot">
+    <span class="live" data-crm="live-status"></span>
+    <a class="pill solid" href="[crm-booking-url]"><span data-crm="booking-label"></span></a>
+    <a class="pill" href="[crm-whatsapp-link]" target="_blank" rel="noopener" data-crm-text="ui.cta.whatsapp_us">WhatsApp us</a>
+  </div>
+</div>
+
+<div id="top"></div>
+<div id="world" aria-label="A scroll journey through the spa" data-crm-attr="aria-label:ui.aria.journey"></div>
+
+<main class="after" id="after">
+  <section id="treatments" class="wrap" data-if="services">
+    <div class="treat-head" data-reveal>
+      <span class="mono eyebrow" data-crm-text="ui.sections.treatments_eyebrow">// treatments</span>
+      <h2 data-crm-text="ui.sections.treatments_title">Choose your treatment.</h2>
+      <p class="lede" data-crm-text="ui.sections.treatments_lede">Pick a treatment and a length, then book it below or message us.</p>
+    </div>
+    <div class="treat-body" data-reveal>
+      <div class="treat-visual" id="treatVisual" data-crm-list="services-with-image">
+        <template><img data-item-src="image" data-item-alt="image_alt" data-key="[service-id]" alt=""></template>
+      </div>
+      <ul class="treat-list" id="treatList" data-crm-list="services">
+        <template>
+          <li class="treat-row" data-key="[service-id]">
+            <div style="min-width:0">
+              <span class="svc" data-service-title="[service-id]"></span>
+              <span class="mono svc-note" data-if="note" data-item="note"></span>
+              <span class="svc-desc" data-service-description="[service-id]"></span>
+              <span class="svc-price" data-service-price="[service-id]"></span>
+            </div>
+            <div class="chips" data-service-duration="[service-id]"></div>
+            <a class="book-link" href="[crm-booking-url]" data-book-service="[service-id]" data-crm-text="ui.services.book">Book →</a>
+          </li>
+        </template>
+      </ul>
+    </div>
+  </section>
+
+  <section id="experience" class="wrap" style="padding-top:0" data-if="experience">
+    <div data-reveal>
+      <span class="mono eyebrow" data-crm-text="ui.sections.visit_eyebrow">// your visit</span>
+      <h2 data-crm-text="ui.sections.visit_title">An hour that's all yours.</h2>
+    </div>
+    <div class="exp-grid" data-reveal>
+      <figure class="exp-photo" data-if="experience-image"><img data-crm-src="experience-image" alt=""></figure>
+      <ol class="steps" data-crm-list="experience">
+        <template><li class="step"><span class="step-num" data-item="num"></span><div><h3 data-item="title"></h3><p data-item="text"></p></div></li></template>
+      </ol>
+    </div>
+  </section>
+
+  <section id="team" style="padding-top:0" data-if="staff">
+    <div class="wrap team-head" data-reveal>
+      <div>
+        <span class="mono eyebrow" data-crm-text="ui.sections.team_eyebrow">// our team</span>
+        <h2 data-crm-text="ui.sections.team_title">The hands behind your hour.</h2>
+      </div>
+      <div class="orbit-ctrl">
+        <button type="button" id="prev" aria-label="Previous photos" data-crm-attr="aria-label:ui.aria.prev_cards">←</button>
+        <button type="button" id="next" aria-label="Next photos" data-crm-attr="aria-label:ui.aria.next_cards">→</button>
+      </div>
+    </div>
+    <div class="orbit" id="orbit">
+      <div class="orbit-track" id="orbitTrack" data-crm-list="staff">
+        <template>
+          <figure class="tcard" data-staff="[staff-id]" data-if="photo">
+            <img draggable="false" decoding="async" data-item-src="photo" data-item-alt="alt" alt="">
+            <figcaption data-if="has_caption"><b data-if="name" data-item="name"></b><span class="mono" data-if="specialty" data-item="specialty"></span></figcaption>
+          </figure>
+        </template>
+      </div>
+    </div>
+  </section>
+
+  <section id="book" class="wrap" style="padding-top:0">
+    <div class="hud" data-reveal>
+      <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+      <div style="min-width:0">
+        <span class="mono eyebrow" data-crm-text="ui.sections.book_eyebrow">// book your session</span>
+        <h2 data-crm-text="ui.sections.book_title">Request your time.</h2>
+        <p class="lede" data-crm-text="ui.sections.book_lede">Fill in the form and we'll contact you to confirm.</p>
+        <form class="bform" id="bookingForm" action="[crm-booking-endpoint]" method="post" novalidate>
+          <div class="field">
+            <label for="bf-service" data-crm-text="ui.form.treatment">Treatment</label>
+            <select id="bf-service" name="service_id" required></select>
+            <span class="err" data-err="service_id"></span>
+          </div>
+          <div class="field">
+            <label for="bf-duration" data-crm-text="ui.form.length">Length</label>
+            <select id="bf-duration" name="duration_minutes"></select>
+          </div>
+          <div class="field">
+            <label for="bf-date" data-crm-text="ui.form.date">Date</label>
+            <input id="bf-date" name="date" type="date" required>
+            <span class="err" data-err="date"></span>
+          </div>
+          <div class="field">
+            <label for="bf-time" data-crm-text="ui.form.time">Time</label>
+            <select id="bf-time" name="time" required></select>
+            <span class="err" data-err="time"></span>
+          </div>
+          <div class="field">
+            <span class="lbl" id="bf-guests-label" data-crm-text="ui.form.guests">Guests</span>
+            <div class="seg" role="radiogroup" aria-labelledby="bf-guests-label">
+              <label><input type="radio" id="bf-g1" name="guests" value="1" checked> <span data-crm-text="ui.form.guest_1">1 guest</span></label>
+              <label><input type="radio" id="bf-g2" name="guests" value="2"> <span data-crm-text="ui.form.guest_2">2 guests</span></label>
+            </div>
+          </div>
+          <div class="field" id="bf-staff-field" hidden>
+            <label for="bf-staff" data-crm-text="ui.form.therapist">Therapist</label>
+            <select id="bf-staff" name="staff_id"></select>
+          </div>
+          <div class="field">
+            <label for="bf-name" data-crm-text="ui.form.name">Your name</label>
+            <input id="bf-name" name="name" type="text" autocomplete="name" required>
+            <span class="err" data-err="name"></span>
+          </div>
+          <div class="field">
+            <label for="bf-phone" data-crm-text="ui.form.phone">Mobile / WhatsApp</label>
+            <input id="bf-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05X XXX XXXX" data-crm-attr="placeholder:ui.form.phone_hint" required>
+            <span class="err" data-err="phone"></span>
+          </div>
+          <div class="field full">
+            <label for="bf-notes" data-crm-text="ui.form.notes">Notes (optional)</label>
+            <textarea id="bf-notes" name="notes" maxlength="500"></textarea>
+          </div>
+          <div class="form-foot">
+            <button class="pill solid" type="submit" id="bf-submit" data-crm-text="ui.form.submit">Request booking</button>
+            <span class="form-note" data-if="has-hours" data-crm-text="ui.hours.form_note" data-crm-tpl>Open <span data-crm="operating-days"></span>, <span data-crm="working-hours"></span></span>
+          </div>
+          <div class="form-status" id="bf-status" role="status" aria-live="polite" hidden></div>
+        </form>
+      </div>
+      <div class="contact-col">
+        <figure class="hud-photo" data-if="booking-image"><img data-crm-src="booking-image" alt=""></figure>
+        <span class="mono eyebrow" style="margin-bottom:0" data-if="phones" data-crm-text="ui.sections.direct_eyebrow">// or reach us directly</span>
+        <div class="wa-list" data-crm-list="whatsapp-phones" data-if="whatsapp-phones">
+          <template><a class="pill" href="[crm-whatsapp-link]" data-phone="[phone-index]" target="_blank" rel="noopener"><span data-crm-text="ui.contact.whatsapp">WhatsApp</span> <span data-crm="phone" data-phone="[phone-index]"></span></a></template>
+        </div>
+        <div class="nums" data-crm-list="phones" data-if="phones">
+          <template>
+            <div class="num"><div><span class="mono" data-item="kind"></span><b data-crm="phone" data-phone="[phone-index]"></b></div><button class="copy" type="button" data-item-copy="number" data-crm-text="ui.contact.copy">Copy</button></div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="visit" class="wrap" style="padding-top:0">
+    <span class="mono eyebrow" data-crm-text="ui.sections.find_eyebrow">// find us</span>
+    <div class="visit" data-reveal>
+      <div data-if="has-hours">
+        <span class="mono status" data-crm="live-status"></span>
+        <span class="big" data-crm="working-hours"></span>
+        <p data-crm="operating-days"></p>
+        <ul class="hours-list" data-if="hours-varies" data-crm-list="hours-rows"><template><li><span data-item="days"></span><b data-item="time"></b></li></template></ul>
+      </div>
+      <div data-if="address">
+        <span class="mono" data-crm-text="ui.sections.address_label">address</span>
+        <h3 data-crm="address-line1"></h3>
+        <p data-crm="address"></p>
+        <a class="map-link" data-crm="address" href="[crm-maps-link]" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          <span data-crm-text="ui.sections.open_maps">Open in Google Maps</span>
+        </a>
+      </div>
+      <div data-if="phones">
+        <span class="mono" data-crm-text="ui.sections.call_label">call or whatsapp</span>
+        <ul class="call-list" data-crm-list="phones">
+          <template>
+            <li>
+              <div><b data-crm="phone" data-phone="[phone-index]"></b><span class="mono" data-item="kind"></span></div>
+              <a class="wa-btn" href="[crm-whatsapp-link]" data-phone="[phone-index]" data-if="whatsapp" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3Z"/></svg><span data-crm-text="ui.contact.whatsapp">WhatsApp</span></a>
+            </li>
+          </template>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>
+        <img class="on-dark" data-crm-src="logo-on-dark" alt="">
+        <img class="on-light" data-crm-src="logo-on-light" alt="">
+      </span>
+      <span class="mono">© <span data-crm="year"></span> <span data-crm="spa-name"></span> · <span data-crm="city"></span></span>
+    </div>
+  </footer>
+</main>
+
+<div class="crm-error" id="crmError" hidden data-crm-text="ui.sections.load_error">We couldn't load the latest spa details. Please refresh the page.</div>
+</div>
+
+
+<script>window.CRM_DATA = {"contract":{"version":2,"locales":["en","ar"],"fields":{"ui.wa.*":{"locales":["en"],"group":"WhatsApp message to the spa"},"contact.whatsapp_message":{"locales":["en"]},"journey[].clip":{"label":"Video (desktop)"},"journey[].clipMobile":{"label":"Video (phone)"},"ui.*":{"group":"Interface texts"}},"l10n":{"ar":{"ui.nav.journey":"الرحلة","ui.nav.treatments":"العلاجات","ui.nav.visit":"زيارتك","ui.nav.team":"فريقنا","ui.nav.book":"احجز","ui.nav.find":"موقعنا","ui.nav.sections":"أقسام الصفحة","ui.aria.theme":"التبديل بين الوضع الفاتح والداكن","ui.aria.menu_open":"فتح القائمة","ui.aria.menu_close":"إغلاق القائمة","ui.aria.journey":"جولة بالتمرير داخل المركز","ui.aria.prev_cards":"الصور السابقة","ui.aria.next_cards":"الصور التالية","ui.aria.scene":"المشهد {n}","ui.hint":"مرّر للدخول","ui.cta.book_now":"احجز الآن","ui.cta.see_treatments":"تصفّح العلاجات","ui.cta.whatsapp_us":"راسلنا على واتساب","ui.sections.treatments_eyebrow":"// العلاجات","ui.sections.treatments_title":"اختر علاجك.","ui.sections.treatments_lede":"اختر العلاج والمدة، ثم احجز أدناه أو راسلنا.","ui.sections.visit_eyebrow":"// زيارتك","ui.sections.visit_title":"ساعة لك وحدك.","ui.sections.team_eyebrow":"// فريقنا","ui.sections.team_title":"الأيدي التي ترافق ساعتك.","ui.sections.book_eyebrow":"// احجز جلستك","ui.sections.book_title":"اطلب موعدك.","ui.sections.book_lede":"املأ النموذج وسنتواصل معك للتأكيد.","ui.sections.direct_eyebrow":"// أو تواصل معنا مباشرة","ui.sections.find_eyebrow":"// موقعنا","ui.sections.address_label":"العنوان","ui.sections.call_label":"اتصال أو واتساب","ui.sections.open_maps":"افتح في خرائط Google","ui.sections.load_error":"تعذّر تحميل أحدث بيانات المركز. يرجى تحديث الصفحة.","ui.services.book":"احجز ←","ui.services.price_from":"من {price} {currency}","ui.services.minutes":"{n} دقيقة","ui.services.ask_timing":"اسألنا عن المدة","ui.staff.alt":"أحد معالجي {spa}","ui.contact.whatsapp":"واتساب","ui.contact.calls":"اتصال","ui.contact.and":" و","ui.contact.copy":"نسخ","ui.contact.copied":"تم النسخ","ui.contact.selected":"تم التحديد","ui.contact.mobile":"جوال","ui.contact.landline":"هاتف أرضي","ui.hours.days.mon":"الاثنين","ui.hours.days.tue":"الثلاثاء","ui.hours.days.wed":"الأربعاء","ui.hours.days.thu":"الخميس","ui.hours.days.fri":"الجمعة","ui.hours.days.sat":"السبت","ui.hours.days.sun":"الأحد","ui.hours.am":"ص","ui.hours.pm":"م","ui.hours.open_until":"مفتوح الآن · حتى {time}","ui.hours.closed_opens":"مغلق الآن · يفتح {time}","ui.hours.closed_opens_day":"مغلق الآن · يفتح {day} {time}","ui.hours.fallback":"ساعات العمل","ui.hours.closed":"مغلق","ui.hours.every_day":"يوميًا","ui.hours.vary":"تختلف المواعيد حسب اليوم","ui.hours.closed_all":"مغلق","ui.hours.open_daily":"مفتوح يوميًا {time}","ui.hours.form_note":"مفتوح {days}، {hours}","ui.form.treatment":"العلاج","ui.form.length":"المدة","ui.form.date":"التاريخ","ui.form.time":"الوقت","ui.form.guests":"الضيوف","ui.form.guest_1":"ضيف واحد","ui.form.guest_2":"ضيفان","ui.form.therapist":"المعالج","ui.form.name":"الاسم","ui.form.phone":"الجوال / واتساب","ui.form.phone_hint":"05X XXX XXXX","ui.form.notes":"ملاحظات (اختياري)","ui.form.submit":"اطلب الحجز","ui.form.sending":"جارٍ الإرسال…","ui.form.choose_treatment":"اختر العلاج","ui.form.no_preference":"بلا تفضيل","ui.form.treatment_first":"اختر العلاج أولًا","ui.form.we_advise":"سننصحك بالمدة","ui.form.date_first":"اختر التاريخ أولًا","ui.form.closed_day":"مغلق في هذا اليوم","ui.form.choose_time":"اختر الوقت","ui.form.after_midnight":" · بعد منتصف الليل","ui.form.no_times":"لا أوقات متاحة في هذا اليوم","ui.form.err_service":"اختر العلاج.","ui.form.err_date":"اختر التاريخ.","ui.form.err_time":"اختر الوقت.","ui.form.err_name":"أدخل اسمك.","ui.form.err_phone":"أدخل رقم جوال، مثل 050 123 4567.","ui.form.almost_title":"خطوة أخيرة.","ui.form.almost_text":"أرسل طلبك عبر واتساب وسيؤكد الفريق موعدك.","ui.form.ok_title":"تم استلام طلبك.","ui.form.ok_text":"شكرًا {name}. سنتواصل معك على {phone} لتأكيد حجزك.","ui.form.fail_title":"لم يصل طلبك.","ui.form.fail_text":"حاول مرة أخرى، أو أرسله إلينا عبر واتساب.","ui.form.send_whatsapp":"أرسل هذا الطلب عبر واتساب","journey[welcome].label":"أهلًا بك","journey[welcome].title":"تمهّل. تنفّس. استرخِ.","journey[welcome].body":"مساج وحمّام مغربي وجاكوزي في قلب {city}، مع فريق يعتني بكل التفاصيل.","journey[moroccan].label":"الحمّام المغربي","journey[moroccan].eyebrow":"الحمّام المغربي والجاكوزي","journey[moroccan].title":"حجر دافئ وبخار ووقت يمضي على مهل.","journey[moroccan].body":"ضوء الفوانيس، بلاط دافئ، وساعة لا يُطلب منك فيها شيء.","journey[moroccan].tags":["45 – 120 دقيقة"],"journey[suites].label":"غرف المساج","journey[suites].eyebrow":"المساج","journey[suites].title":"كلاسيكي أو بالزيت الساخن أو بالبلسم. على راحتك.","journey[suites].body":"اختر العلاج والمدة، ومعالجك يتولى الباقي.","journey[suites].tags":["45 · 60 · 90 · 120 دقيقة"],"journey[calm].label":"السكينة","journey[calm].eyebrow":"السكينة","journey[calm].title":"ماء وضوء وهدوء.","journey[calm].body":"صوت هادئ وضوء ناعم وأنفاس أبطأ قبل أن تعود إلى المدينة.","journey[book].label":"الحجز","journey[book].title":"ساعتك بانتظارك.","journey[book].body":"راسلنا بالعلاج والوقت الذي تفضّله، وسنحجزه لك.","spa.experience[message].title":"راسلنا","spa.experience[message].text":"أخبرنا بالعلاج والمدة والوقت الذي تفضّله عبر واتساب أو الهاتف.","spa.experience[arrive].title":"وصول واسترخاء","spa.experience[arrive].text":"استرخِ في مكانك، وخذ نفسًا عميقًا، ودع معالجك يتولى الباقي.","spa.experience[leave].title":"غادر أخفّ","spa.experience[leave].text":"عُد إلى المدينة مسترخيًا، وارجع إلينا متى احتجت.","spa.experience_image_alt":"زجاجة زيت جوجوبا بجانب شموع مضاءة","booking.label":"احجز جلسة","booking.image_alt":"زجاجتا زيت جوجوبا وماء ورد على صينية خشبية بجانب شمعة"}}},"spa":{"name":"Your Spa","short_name":"Your Spa","area_label":"","logo_on_dark":"","logo_on_light":"","timezone":"Asia/Dubai","experience":[{"id":"message","title":"Message us","text":"Tell us the treatment, the length and the time you'd like on WhatsApp or by phone."},{"id":"arrive","title":"Arrive and unwind","text":"Settle in, take a slow breath and let your therapist take care of the rest."},{"id":"leave","title":"Leave lighter","text":"Step back into the city relaxed, and come back whenever you need it."}],"experience_image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","experience_image_alt":"Jojoba oil bottle beside lit candles"},"journey":[{"id":"welcome","label":"Welcome","image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","focus":"62% 0%","accent":"#c27b3f","eyebrow":"{area} · {hours}","title":"Slow down. Breathe. Be relaxed.","body":"Massage, Moroccan bath and jacuzzi in the heart of {city}, with a team that looks after every detail.","tags":[],"cta":false,"clip":null,"clipMobile":null},{"id":"moroccan","label":"Moroccan bath","image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","focus":"50% 0%","accent":"#c0613f","eyebrow":"Moroccan bath & jacuzzi","title":"Warm stone, steam and slow time.","body":"Lantern light, warm tiles and an hour where nothing is asked of you.","tags":["45 – 120 min"],"cta":false,"clip":null,"clipMobile":null},{"id":"suites","label":"Massage suites","image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","focus":"50% 0%","accent":"#b08850","eyebrow":"Massage","title":"Classic, hot oil or balm. Your pace.","body":"Choose the treatment and the length. Your therapist does the rest.","tags":["45 · 60 · 90 · 120 min"],"cta":false,"clip":null,"clipMobile":null},{"id":"calm","label":"Calm","image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","focus":"50% 0%","accent":"#5f9c9a","eyebrow":"Calm","title":"Water, light and quiet.","body":"Soft sound, soft light and a slower breath before you head back into the city.","tags":[],"cta":false,"clip":null,"clipMobile":null},{"id":"book","label":"Book","image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","focus":"50% 0%","accent":"#7f9a6e","eyebrow":"{hours}","title":"Your hour is waiting.","body":"Message us with the treatment and time you'd like, and we'll hold it for you.","tags":[],"cta":true,"clip":null,"clipMobile":null}],"contact":{"whatsapp_number":"","whatsapp_message":"Hello {spa}, I would like to book a session.","phones":[]},"location":{"address_line1":"","address_line2":"","city":"","country":"","maps_url":""},"hours":[],"booking":{"url":null,"label":"Book a session","form_endpoint":null,"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"Jojoba oil and rose water bottles on a wooden tray by a candle"},"services":[{"id":"normal-massage","name":"Normal massage","note":"","description":"","durations":[45,60,90,120],"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"Therapist's hands kneading a guest's shoulder during a massage","price":null},{"id":"hot-oil","name":"Hot oil / balm massage","note":"","description":"","durations":[45,60,90,120],"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"Warm oil poured onto a guest's back by candlelight","price":null},{"id":"moroccan-bath","name":"Moroccan bath or jacuzzi","note":"","description":"","durations":[45,60,90,120],"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"Candle-lit jacuzzi scattered with rose petals","price":null},{"id":"massage-shaving","name":"Massage with shaving","note":"bikini and underarm","description":"","durations":[45,60,90,120],"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"Therapist's hands resting on a guest's back over a white towel","price":null},{"id":"four-hands","name":"4-hands massage","note":"","description":"","durations":[],"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"Two therapists massaging one guest together","price":null},{"id":"couple","name":"Couple massage","note":"","description":"","durations":[],"image":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=","image_alt":"A couple relaxing side by side during a candle-lit massage","price":null},{"id":"full-body-shaving","name":"Full body shaving","note":"","description":"","durations":[],"image":"","image_alt":"","price":null}],"staff":[],"ui":{"nav":{"journey":"Journey","treatments":"Treatments","visit":"Your visit","team":"Our team","book":"Book","find":"Find us","sections":"Sections"},"aria":{"theme":"Switch light or dark theme","menu_open":"Open menu","menu_close":"Close menu","journey":"A scroll journey through the spa","prev_cards":"Previous photos","next_cards":"Next photos","scene":"Scene {n}"},"hint":"scroll to step inside","cta":{"book_now":"Book now","see_treatments":"See treatments","whatsapp_us":"WhatsApp us"},"sections":{"treatments_eyebrow":"// treatments","treatments_title":"Choose your treatment.","treatments_lede":"Pick a treatment and a length, then book it below or message us.","visit_eyebrow":"// your visit","visit_title":"An hour that's all yours.","team_eyebrow":"// our team","team_title":"The hands behind your hour.","book_eyebrow":"// book your session","book_title":"Request your time.","book_lede":"Fill in the form and we'll contact you to confirm.","direct_eyebrow":"// or reach us directly","find_eyebrow":"// find us","address_label":"address","call_label":"call or whatsapp","open_maps":"Open in Google Maps","load_error":"We couldn't load the latest spa details. Please refresh the page."},"services":{"book":"Book →","price_from":"from {price} {currency}","minutes":"{n} min","ask_timing":"ask us about timing"},"staff":{"alt":"{spa} therapist"},"contact":{"whatsapp":"WhatsApp","calls":"calls","and":" & ","copy":"Copy","copied":"Copied","selected":"Selected","mobile":"Mobile","landline":"Landline"},"hours":{"days":{"mon":"Mon","tue":"Tue","wed":"Wed","thu":"Thu","fri":"Fri","sat":"Sat","sun":"Sun"},"am":"AM","pm":"PM","open_until":"Open now · until {time}","closed_opens":"Closed now · opens {time}","closed_opens_day":"Closed now · opens {day} {time}","fallback":"Opening hours","closed":"Closed","every_day":"every day","vary":"hours vary by day","closed_all":"closed","open_daily":"Open daily {time}","form_note":"Open {days}, {hours}"},"form":{"treatment":"Treatment","length":"Length","date":"Date","time":"Time","guests":"Guests","guest_1":"1 guest","guest_2":"2 guests","therapist":"Therapist","name":"Your name","phone":"Mobile / WhatsApp","phone_hint":"05X XXX XXXX","notes":"Notes (optional)","submit":"Request booking","sending":"Sending…","choose_treatment":"Choose a treatment","no_preference":"No preference","treatment_first":"Choose a treatment first","we_advise":"We will advise","date_first":"Choose a date first","closed_day":"Closed on this day","choose_time":"Choose a time","after_midnight":" (after midnight)","no_times":"No times left on this day","err_service":"Choose a treatment.","err_date":"Choose a date.","err_time":"Choose a time.","err_name":"Enter your name.","err_phone":"Enter a mobile number, e.g. 050 123 4567.","almost_title":"Almost done.","almost_text":"Send your request on WhatsApp and the team will confirm your time.","ok_title":"Request received.","ok_text":"Thank you, {name}. We'll contact you on {phone} to confirm your booking.","fail_title":"Your request did not go through.","fail_text":"Please try again, or send it to us on WhatsApp.","send_whatsapp":"Send this request on WhatsApp"},"wa":{"intro":"Hello {spa}, I would like to book:","minutes":" · {n} min","guests_1":"{n} guest","guests_2":"{n} guests","when":"{date} at {time}","am":"AM","pm":"PM","name":"Name: {name}","phone":"Phone: {phone}","notes":"Notes: {notes}"}}};</script>
+<script>
+/* ============================================================================
+   scroll-world scrub engine — adapted for this template.
+   Original: github.com/oso95/scroll-world (MIT License, Copyright (c) 2026 cyw).
+   Changes: per-scene focus point; portrait photos shown as a large lit panel over the
+   live background; a 3D camera drift; smooth-scroll aware jumps; a hand-off fade when
+   the journey ends; page chrome supplied by the template.
+   ========================================================================== */
+function mountScrollWorld(container, config) {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const coarse = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+  const smallMQ = window.matchMedia('(max-width: 860px)');
+  const isMobile = () => coarse || smallMQ.matches;
+  const SECTIONS = config.sections || [];
+  const CONNECTORS = config.connectors || [];
+  const CONNECTORS_M = config.connectorsMobile || [];
+  const DIVE_W = config.diveScroll || 1.3;
+  const CONN_W = config.connScroll || 0.9;
+  const CROSSFADE = (config.crossfade != null) ? config.crossfade : 0.12;
+  const N = SECTIONS.length;
+  if (!N) return null;
+
+  injectCSS();
+  container.classList.add('sw-root');
+
+  const SEGMENTS = [];
+  SECTIONS.forEach((s, i) => {
+    const dive = { kind: 'dive', si: i, clip: s.clip, clipM: s.clipMobile, still: s.still, stillM: s.stillMobile,
+                   focus: s.focus, accent: s.accent, w: s.scroll || DIVE_W, linger: s.linger || 0 };
+    SEGMENTS.push(dive);
+    s._seg = dive;
+    if (i < N - 1 && CONNECTORS[i]) {
+      SEGMENTS.push({ kind: 'conn', si: i, clip: CONNECTORS[i], clipM: CONNECTORS_M[i],
+                      still: SECTIONS[i + 1].still, stillM: SECTIONS[i + 1].stillMobile, focus: SECTIONS[i + 1].focus,
+                      accent: SECTIONS[i + 1].accent, w: CONN_W });
+    }
+  });
+  const NSEG = SEGMENTS.length;
+
+  const scrollbar = el('div', 'sw-scrollbar');
+  const scrollbarFill = el('span'); scrollbar.appendChild(scrollbarFill);
+  const stage = el('div', 'sw-stage');
+  const copylayer = el('div', 'sw-copylayer');
+  const route = el('div', 'sw-route');
+  const hint = el('div', 'sw-hint');
+  const hintText = el('span'); hintText.textContent = config.hint != null ? config.hint : 'scroll'; hint.appendChild(hintText);
+  hint.appendChild(el('i'));
+  const track = el('div', 'sw-track');
+  [scrollbar, stage, copylayer, route, hint, track].forEach(n => container.appendChild(n));
+  const fixedLayers = [stage, copylayer, route, hint];
+
+  SEGMENTS.forEach((s, k) => {
+    const scene = el('div', 'sw-scene'); scene.style.setProperty('--sw-accent', s.accent || '');
+    const img = el('img', 'sw-scene__still'); img.alt = ''; img.decoding = 'async'; img.loading = k < 2 ? 'eager' : 'lazy';
+    const poster = (isMobile() && s.stillM) ? s.stillM : s.still;
+    if (poster) img.src = poster;
+    if (s.focus) img.style.objectPosition = s.focus;
+    const aura = el('div', 'sw-scene__aura');
+    aura.innerHTML = '<i class="aura-spot"></i><i class="aura-ring"></i><i class="aura-ring two"></i>';
+    const frame = el('div', 'sw-scene__frame'); frame.appendChild(img);
+    scene.appendChild(aura); scene.appendChild(frame); stage.appendChild(scene);
+    s.frame = frame; s.aura = aura; s.portrait = false;
+    s.el = scene; s.img = img; s.video = null; s.hasClip = false;
+    s.loading = false; s.ready = false; s.cur = 0; s.target = 0; s.visible = false;
+    const markShape = () => { s.portrait = img.naturalHeight > img.naturalWidth * 1.05; scene.classList.toggle('is-portrait', s.portrait); frame.style.setProperty('--img-ratio', img.naturalWidth + '/' + img.naturalHeight); read(); };
+    if (img.complete && img.naturalWidth) setTimeout(markShape, 0); else img.addEventListener('load', markShape, { once: true });
+  });
+
+  const copies = [], dots = [];
+  SECTIONS.forEach((s, i) => {
+    const c = el('article', 'sw-copy'); c.style.setProperty('--sw-accent', s.accent || '');
+    c.innerHTML =
+      `<span class="sw-copy__num">${pad(i + 1)} / ${pad(N)}</span>` +
+      (s.eyebrow ? `<span class="sw-copy__eyebrow">${esc(s.eyebrow)}</span>` : '') +
+      (s.title ? `<h2 class="sw-copy__title">${esc(s.title)}</h2>` : '') +
+      (s.body ? `<p class="sw-copy__body">${esc(s.body)}</p>` : '') +
+      (s.tags && s.tags.length ? `<ul class="sw-copy__tags">${s.tags.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '') +
+      (s.cta ? `<div class="sw-copy__cta">${ctaBtns(s.cta)}</div>` : '');
+    copylayer.appendChild(c); copies.push(c);
+    const dot = el('button', 'sw-route__dot'); dot.style.setProperty('--sw-accent', s.accent || '');
+    dot.setAttribute('aria-label', s.label || String(config.sceneLabel || '').replace(/\{n\}/g, String(i + 1)));
+    dot.innerHTML = `<span class="sw-route__label">${esc(s.label || '')}</span><i></i>`;
+    dot.addEventListener('click', () => jumpTo(i)); route.appendChild(dot); dots.push(dot);
+  });
+
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const smooth = x => { x = clamp(x); return x * x * (3 - 2 * x); };
+  const lingerEase = (x, L) => { L = clamp(L); const c = x - 0.5; return (1 - L) * x + L * (4 * c * c * c + 0.5); };
+  let vh = window.innerHeight, stageX = 0, totalW = 0, activeIndex = -1, ticking = false, top0 = 0;
+  let laidOutW = window.innerWidth;
+
+  function layout() {
+    vh = window.innerHeight;
+    laidOutW = window.innerWidth;
+    stageX = window.innerWidth > 860 ? 4 : 0;
+    top0 = container.getBoundingClientRect().top + window.scrollY;
+    let off = 0;
+    SEGMENTS.forEach(s => { s.start = top0 + off * vh; off += s.w; s.end = top0 + off * vh; });
+    totalW = off;
+    track.style.height = (totalW * vh + vh) + 'px';
+    read();
+  }
+
+  function jumpTo(i) {
+    const seg = SECTIONS[i]._seg;
+    const y = seg.start + (seg.end - seg.start) * 0.5;
+    if (config.scrollTo) config.scrollTo(y); else window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
+  }
+
+  function loadClip(s) {
+    if (reduce || s.loading || !s.clip) return;
+    s.loading = true;
+    const url = (isMobile() && s.clipM) ? s.clipM : s.clip;
+    fetch(url).then(r => r.ok ? r.blob() : Promise.reject(new Error('404')))
+      .then(blob => {
+        const v = document.createElement('video');
+        v.className = 'sw-scene__video';
+        v.muted = true; v.playsInline = true; v.preload = 'auto';
+        v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+        v.src = URL.createObjectURL(blob);
+        v.addEventListener('loadedmetadata', () => { s.ready = true; read(); });
+        v.addEventListener('seeked', () => { s.el.classList.add('has-clip'); }, { once: true });
+        v.addEventListener('loadeddata', () => { try { v.pause(); } catch (e) {} if (userReady) primeVideo(v); });
+        s.el.appendChild(v); s.video = v; s.hasClip = true;
+      }).catch(() => { s.loading = false; });
+  }
+
+  function read() {
+    const y = window.scrollY || window.pageYOffset;
+    const fade = CROSSFADE * vh;
+    let ci = 0;
+    for (let i = 0; i < NSEG; i++) if (y >= SEGMENTS[i].start) ci = i;
+
+    for (let i = 0; i < NSEG; i++) {
+      const s = SEGMENTS[i];
+      if (y > s.start - 1.6 * vh && y < s.end + 1.6 * vh) loadClip(s);
+      const local = clamp((y - s.start) / (s.end - s.start), 0, 1);
+      s.target = s.linger ? lingerEase(local, s.linger) : local;
+      let outside = 0;
+      if (y < s.start) outside = s.start - y; else if (y > s.end) outside = y - s.end;
+      if (i === NSEG - 1 && y > s.end) outside = 0;
+      const op = smooth(1 - outside / fade);
+      s.el.style.opacity = op; s.visible = op > 0.001;
+      s.el.style.zIndex = (i === ci) ? '120' : String(100 + Math.round(op * 10));
+      if (s.visible && (!s.hasClip || !s.ready)) {
+        if (reduce) { s.img.style.transform = 'none'; continue; }
+        if (s.portrait && !isMobile()) {
+          const ry = ((0.5 - local) * 9).toFixed(2);
+          const ty = ((0.5 - local) * 3).toFixed(2);
+          s.frame.style.transform = `translateY(calc(-50% + ${ty}vh)) perspective(1600px) rotateY(${ry}deg)`;
+          s.img.style.transform = `scale(${(1.01 + local * 0.06).toFixed(3)})`;
+          s.aura.style.transform = `translateY(${((0.5 - local) * -4).toFixed(2)}vh)`;
+        } else {
+          const sc = 1.08 + local * 0.1;   /* enough overscan that the drift never shows an edge */
+          const ry = ((0.5 - local) * 4).toFixed(2);
+          const ty = (-local * 2.4).toFixed(2);   /* drift upward only, so the top edge never shows */
+          s.frame.style.transform = '';
+          s.img.style.transform = `translate3d(${stageX - 2}vw, ${ty}vh, 0) perspective(1400px) rotateY(${ry}deg) scale(${sc.toFixed(3)})`;
+        }
+      }
+    }
+
+    for (let i = 0; i < N; i++) {
+      const seg = SECTIONS[i]._seg;
+      const pr = clamp((y - seg.start) / (seg.end - seg.start), 0, 1);
+      const before = y < seg.start, after = y > seg.end;
+      let cop;
+      if (i === 0) cop = after ? 0 : smooth(1 - pr / 0.62);
+      else if (i === N - 1) cop = before ? 0 : smooth(pr / 0.4);
+      else cop = (before || after) ? 0 : smooth(1 - Math.abs(pr - 0.5) / 0.5);
+      const c = copies[i];
+      c.style.opacity = cop;
+      const base = isMobile() ? '0px' : '-50%';
+      c.style.transform = reduce ? (isMobile() ? 'none' : 'translateY(-50%)') : `translateY(calc(${base} + ${((0.5 - pr) * 4).toFixed(2)}vh))`;
+      c.style.pointerEvents = cop > 0.5 ? 'auto' : 'none';
+    }
+
+    const cur = SEGMENTS[ci];
+    const near = clamp(cur.kind === 'dive' ? cur.si
+      : (((y - cur.start) / (cur.end - cur.start)) > 0.5 ? cur.si + 1 : cur.si), 0, N - 1);
+    if (near !== activeIndex) {
+      activeIndex = near;
+      dots.forEach((d, k) => d.classList.toggle('is-active', k === near));
+      container.style.setProperty('--sw-accent', SECTIONS[near].accent || '');
+    }
+    const endY = top0 + totalW * vh;
+    scrollbarFill.style.transform = `scaleX(${clamp((y - top0) / (totalW * vh))})`;
+    hint.style.opacity = clamp(1 - (y - top0) / (0.5 * vh));
+    const out = smooth((y - endY) / (0.4 * vh));
+    const shown = 1 - out;
+    fixedLayers.forEach(n => { n.style.opacity = n === hint ? Math.min(shown, Number(hint.style.opacity)) : shown; n.style.visibility = shown < 0.01 ? 'hidden' : 'visible'; });
+    scrollbar.style.opacity = shown;
+    ticking = false;
+  }
+
+  function raf() {
+    const eps = isMobile() ? 0.02 : 0.008;
+    for (let i = 0; i < NSEG; i++) {
+      const s = SEGMENTS[i];
+      if (!s.hasClip || !s.ready || !s.video) continue;
+      if (s.video.seeking) continue;
+      if (!s.visible && Math.abs(s.cur - s.target) < 0.002) continue;
+      s.cur += (s.target - s.cur) * (reduce ? 1 : 0.18);
+      const dur = s.video.duration || 1;
+      const t = clamp(s.cur, 0, 0.999) * dur;
+      if (Math.abs(s.video.currentTime - t) > eps) { try { s.video.currentTime = t; } catch (e) {} }
+    }
+    requestAnimationFrame(raf);
+  }
+
+  let userReady = false;
+  function primeVideo(v) {
+    if (!isMobile() || !v) return;
+    try { const p = v.play(); if (p && p.then) p.then(() => { try { v.pause(); } catch (e) {} }).catch(() => {}); }
+    catch (e) {}
+  }
+  function onFirstGesture() {
+    if (userReady) return;
+    userReady = true;
+    SEGMENTS.forEach(s => primeVideo(s.video));
+  }
+  window.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true });
+  window.addEventListener('touchstart', onFirstGesture, { once: true, passive: true });
+
+  window.addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(read); } }, { passive: true });
+  function onResize() {
+    if (coarse && window.innerWidth === laidOutW) return;
+    layout();
+  }
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', layout);
+  window.addEventListener('load', layout);
+  layout();
+  requestAnimationFrame(raf);
+  return { layout, jumpTo, endY: () => top0 + totalW * vh };
+
+  function el(tag, cls) { const n = document.createElement(tag); if (cls) n.className = cls; return n; }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function ctaBtns(cta) {
+    let h = '';
+    const ext = href => /^https?:/.test(href || '') ? ' target="_blank" rel="noopener"' : '';
+    if (cta.primary) h += `<a class="sw-btn sw-btn--primary" href="${esc(cta.primary.href || '#')}"${ext(cta.primary.href)}>${esc(cta.primary.label)}</a>`;
+    if (cta.secondary) h += `<a class="sw-btn sw-btn--ghost" href="${esc(cta.secondary.href || '#')}"${ext(cta.secondary.href)}>${esc(cta.secondary.label)}</a>`;
+    return h;
+  }
+}
+
+function injectCSS() {
+  if (document.getElementById('sw-css')) return;
+  const css = `
+  .sw-root{color:var(--sw-ink);font-family:var(--sw-font-body);}
+  .sw-scrollbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:color-mix(in srgb,var(--sw-accent) 14%,transparent);}
+  .sw-scrollbar span{display:block;height:100%;width:100%;transform-origin:0 50%;transform:scaleX(0);background:var(--sw-accent);}
+  .sw-stage{position:fixed;inset:0;z-index:10;pointer-events:none;}
+  .sw-scene{position:absolute;inset:0;opacity:0;overflow:hidden;will-change:opacity;}
+  .sw-scene__video,.sw-scene__still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 50%;}
+  .sw-scene__still{will-change:transform;transform-origin:50% 50%;} .sw-scene.has-clip .sw-scene__still{opacity:0;} .sw-scene__video{z-index:1;}
+  .sw-copylayer{position:fixed;inset:0;z-index:20;pointer-events:none;}
+  .sw-copylayer::before{content:"";position:absolute;inset:0;width:min(72vw,1040px);background:linear-gradient(90deg,var(--sw-bg) 0%,color-mix(in srgb,var(--sw-bg) 84%,transparent) 36%,color-mix(in srgb,var(--sw-bg) 40%,transparent) 64%,transparent 100%);}
+  .sw-copy{position:absolute;left:clamp(18px,5vw,72px);top:52%;transform:translateY(-50%);width:min(52vw,720px);opacity:0;will-change:opacity,transform;}
+  .sw-copy__num{font-size:.9rem;letter-spacing:.14em;}
+  .sw-copy__eyebrow{display:block;margin-top:22px;}
+  .sw-copy__title{font-family:var(--sw-font-display);color:var(--sw-ink);text-shadow:0 2px 24px color-mix(in srgb,var(--sw-bg) 70%,transparent);}
+  .sw-copy__body{line-height:1.55;max-width:38ch;text-shadow:0 1px 12px color-mix(in srgb,var(--sw-bg) 90%,transparent);}
+  .sw-copy__tags{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0;padding:0;}
+  .sw-copy__tags li{font-size:.95rem;padding:9px 18px;border-radius:999px;border:1px solid;}
+  .sw-copy__cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px;pointer-events:auto;}
+  .sw-btn{text-decoration:none;font-weight:600;font-size:1.05rem;padding:16px 30px;border-radius:999px;transition:transform .2s;border:1.5px solid transparent;}
+  .sw-btn:hover{transform:translateY(-2px);}
+  .sw-route{position:fixed;right:clamp(14px,2.4vw,30px);top:50%;z-index:40;transform:translateY(-50%);display:flex;flex-direction:column;gap:22px;padding:18px 10px;}
+  .sw-route::before{content:"";position:absolute;left:50%;top:22px;bottom:22px;width:2px;transform:translateX(-50%);background:var(--sw-accent);opacity:.32;}
+  .sw-route__dot{position:relative;border:0;background:transparent;cursor:pointer;width:14px;height:14px;display:grid;place-items:center;padding:0;}
+  .sw-route__dot i{width:9px;height:9px;border-radius:50%;background:color-mix(in srgb,var(--sw-accent) 45%,transparent);transition:transform .3s,background .3s,box-shadow .3s;}
+  .sw-route__dot:hover i{transform:scale(1.25);background:var(--sw-accent);}
+  .sw-route__dot.is-active i{background:var(--sw-accent);transform:scale(1.4);box-shadow:0 0 0 5px color-mix(in srgb,var(--sw-accent) 24%,transparent);}
+  .sw-route__label{position:absolute;right:24px;top:50%;transform:translateY(-50%) translateX(6px);white-space:nowrap;font-size:.78rem;font-weight:600;padding:5px 11px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;border:1px solid color-mix(in srgb,var(--sw-accent) 18%,transparent);}
+  .sw-route__dot:hover .sw-route__label,.sw-route__dot.is-active .sw-route__label{opacity:1;transform:translateY(-50%) translateX(0);}
+  .sw-hint{position:fixed;left:50%;bottom:26px;z-index:30;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;}
+  .sw-hint i{width:22px;height:34px;border-radius:12px;border:2px solid color-mix(in srgb,var(--sw-ink) 30%,transparent);position:relative;}
+  .sw-hint i::after{content:"";position:absolute;left:50%;top:7px;width:4px;height:7px;border-radius:2px;background:var(--sw-accent);transform:translateX(-50%);animation:sw-wheel 1.7s ease-in-out infinite;}
+  @keyframes sw-wheel{0%{opacity:0;top:6px}40%{opacity:1}100%{opacity:0;top:17px}}
+  .sw-track{position:relative;z-index:1;width:100%;pointer-events:none;}
+  @media (max-width:860px){
+    .sw-copylayer::before{width:100%;height:64%;top:auto;bottom:0;background:linear-gradient(0deg,var(--sw-bg) 10%,color-mix(in srgb,var(--sw-bg) 72%,transparent) 48%,transparent 100%);}
+    .sw-copy{left:clamp(18px,5vw,64px);right:clamp(18px,5vw,64px);top:auto;width:auto;max-width:560px;}
+    .sw-copy__body{max-width:none;}
+    .sw-hint{bottom:calc(20px + env(safe-area-inset-bottom));}
+    .sw-route{gap:16px;right:6px;} .sw-route__label{display:none;}
+  }
+  @media (hover:none) and (pointer:coarse){
+    .sw-route{padding:14px 6px;}
+    .sw-route__dot{width:28px;height:28px;}
+    .sw-btn{padding:15px 26px;}
+  }
+  @media (prefers-reduced-motion:reduce){ .sw-hint i::after{animation:none;} }
+  `;
+  const style = document.createElement('style'); style.id = 'sw-css';
+  style.textContent = '@layer sw {\n' + css + '\n}';
+  document.head.appendChild(style);
+}
+</script>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rootEl = document.getElementById('crmRoot');
+  const html = document.documentElement;
+  /* keep the journey photos below the top bar: expose its height as --nav-h */
+  const navEl = document.getElementById('nav');
+  const setNavH = () => html.style.setProperty('--nav-h', Math.ceil(navEl.getBoundingClientRect().height) + 'px');
+  setNavH(); addEventListener('resize', setNavH); addEventListener('load', setNavH);
+  if (window.ResizeObserver) new ResizeObserver(setNavH).observe(navEl);
+  const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const DAY_LABEL = {};   /* ui.hours.days, filled once the CRM data is in */
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const isPlaceholder = v => /^\[crm-[a-z-]+\]$/.test(String(v || ''));
+
+  /* ---------- smooth scrolling (vanilla; mouse wheel only, touch stays native) ---------- */
+  const glide = (() => {
+    const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+    let target = scrollY, current = scrollY, active = false, anim = null, locked = false;
+    const maxY = () => document.documentElement.scrollHeight - innerHeight;
+    function scrollableParent(n) {
+      while (n && n !== document.body && n.nodeType === 1) {
+        const oy = getComputedStyle(n).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight + 1) return n;
+        n = n.parentElement;
+      }
+      return null;
+    }
+    if (fine && !reduce) {
+      addEventListener('wheel', e => {
+        if (e.ctrlKey || locked || Math.abs(e.deltaX) > Math.abs(e.deltaY) || scrollableParent(e.target)) return;
+        e.preventDefault();
+        const d = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+        if (!active || anim) { current = scrollY; target = scrollY; }
+        anim = null; active = true;
+        target = clamp(target + d, 0, maxY());
+      }, {passive: false});
+    }
+    addEventListener('scroll', () => { if (!active) { current = target = scrollY; } }, {passive: true});
+    ['keydown', 'touchstart'].forEach(ev => addEventListener(ev, () => { active = false; anim = null; }, {passive: true}));
+    function to(y) {
+      y = clamp(y, 0, maxY());
+      if (reduce) { scrollTo(0, y); return; }
+      current = scrollY; target = y; active = true;
+      anim = {from: current, to: y, t0: performance.now(), dur: Math.min(1800, 700 + Math.abs(y - current) * .12)};
+    }
+    function frame(now) {
+      if (!active || locked) return;
+      if (anim) {
+        const k = clamp((now - anim.t0) / anim.dur);
+        const e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        current = anim.from + (anim.to - anim.from) * e;
+        if (k >= 1) { active = false; anim = null; }
+      } else {
+        current += (target - current) * .1;
+        if (Math.abs(target - current) < .5) { current = target; active = false; }
+      }
+      scrollTo(0, current);
+    }
+    return {to, frame, lock(v) { locked = v; active = false; anim = null; }};
+  })();
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    const id = a.getAttribute('href').slice(1);
+    const target = id === 'top' ? null : document.getElementById(id);
+    if (id !== 'top' && !target) return;
+    e.preventDefault();
+    closeSheet();
+    glide.to(target ? target.getBoundingClientRect().top + scrollY - 96 : 0);
+  });
+
+  /* ---------- theme: follows the device, the button overrides ---------- */
+  const store = {
+    get() { try { return localStorage.getItem('spa-theme'); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem('spa-theme', v); } catch (e) { /* storage blocked */ } }
+  };
+  const saved = store.get();
+  html.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');   /* dark by default; a visitor's choice is kept across reloads */
+  const isDark = () => html.getAttribute('data-theme') ? html.getAttribute('data-theme') === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const next = isDark() ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    store.set(next);
+    ambient.refresh();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => ambient.refresh());
+
+  /* ---------- mobile menu ---------- */
+  const sheet = document.getElementById('sheet'), menuBtn = document.getElementById('menuBtn');
+  function closeSheet() { if (sheet.hidden) return; sheet.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); document.body.classList.remove('locked'); glide.lock(false); }
+  menuBtn.addEventListener('click', () => { sheet.hidden = false; menuBtn.setAttribute('aria-expanded', 'true'); document.body.classList.add('locked'); glide.lock(true); });
+  document.getElementById('sheetClose').addEventListener('click', closeSheet);
+  addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+  /* ---------- ambient background: candle glow, steam motes, silk waves ---------- */
+  const ambient = (() => {
+    const cv = document.getElementById('ambient'), ctx = cv.getContext('2d');
+    let W = 0, H = 0, dpr = 1, col = {}, running = true;
+    const blobs = [
+      {x: .18, y: .22, r: .55, c: 1, sp: .045, ph: 0}, {x: .82, y: .3, r: .5, c: 2, sp: .038, ph: 2},
+      {x: .55, y: .8, r: .6, c: 3, sp: .03, ph: 4}, {x: .3, y: .7, r: .42, c: 1, sp: .05, ph: 1.3},
+      {x: .9, y: .85, r: .45, c: 2, sp: .042, ph: 3.1}
+    ];
+    const motes = Array.from({length: 60}, () => newMote(true));
+    function newMote(anyY) {
+      return {x: Math.random(), y: anyY ? Math.random() : 1.05, r: .6 + Math.random() * 2, v: .006 + Math.random() * .014,
+              sway: .004 + Math.random() * .01, ph: Math.random() * 6.28, a: .25 + Math.random() * .5};
+    }
+    function refresh() {
+      const cs = getComputedStyle(html);
+      col = {1: cs.getPropertyValue('--amb-1').trim(), 2: cs.getPropertyValue('--amb-2').trim(), 3: cs.getPropertyValue('--amb-3').trim(),
+             m: cs.getPropertyValue('--amb-mote').trim(), a: parseFloat(cs.getPropertyValue('--amb-alpha')) || .2,
+             line: parseFloat(cs.getPropertyValue('--amb-line')) || .16};
+    }
+    function size() {
+      dpr = Math.min(devicePixelRatio || 1, 1.5);
+      W = innerWidth; H = innerHeight;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function draw(t, dt) {
+      ctx.clearRect(0, 0, W, H);
+      const m = Math.max(W, H);
+      blobs.forEach(b => {
+        const x = (b.x + Math.sin(t * b.sp + b.ph) * .09) * W;
+        const y = (b.y + Math.cos(t * b.sp * .8 + b.ph) * .07) * H;
+        const r = b.r * m * (1 + Math.sin(t * .25 + b.ph) * .06);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(${col[b.c]},${col.a})`);
+        g.addColorStop(1, `rgba(${col[b.c]},0)`);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      });
+      ctx.lineWidth = 1.4;
+      for (let k = 0; k < 4; k++) {
+        ctx.beginPath();
+        const base = H * (.56 + k * .1), amp = 20 + k * 9, f = .0022 - k * .00025, sp = .16 + k * .05;
+        for (let x = 0; x <= W; x += 16) {
+          const y = base + Math.sin(x * f + t * sp + k) * amp + Math.sin(x * f * 2.3 - t * sp * .7) * amp * .35;
+          x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.strokeStyle = `rgba(${col[k % 2 ? 2 : 1]},${(col.line * (1 - k * .18)).toFixed(3)})`;
+        ctx.stroke();
+      }
+      motes.forEach((p, i) => {
+        p.y -= p.v * dt; p.ph += dt * .8;
+        if (p.y < -.05) motes[i] = newMote(false);
+        const x = (p.x + Math.sin(p.ph) * p.sway) * W, y = p.y * H;
+        const fadeEdge = Math.min(1, p.y * 4, (1.05 - p.y) * 4);
+        ctx.beginPath(); ctx.arc(x, y, p.r, 0, 6.283);
+        ctx.fillStyle = `rgba(${col.m},${(p.a * fadeEdge * (.6 + .4 * Math.sin(p.ph * 1.7))).toFixed(3)})`;
+        ctx.fill();
+      });
+    }
+    refresh(); size();
+    addEventListener('resize', size);
+    document.addEventListener('visibilitychange', () => { running = !document.hidden; });
+    if (reduce) draw(0, 0);
+    return {refresh: () => { refresh(); if (reduce) draw(0, 0); }, frame: (t, dt) => { if (running && !reduce) draw(t, dt); }};
+  })();
+
+  /* ---------- helpers ---------- */
+  const get = (obj, path) => String(path).split('.').reduce((a, k) => (a == null ? a : a[k]), obj);
+  /* contract v2: every interface text is CRM_DATA.ui (per spa and language); {tokens} come from vars; a missing key reads '' */
+  let CRM = {};
+  const T = (path, vars) => { const v = get(CRM, path); return typeof v === 'string' ? v.replace(/\{([a-z_]+)\}/g, (m, k) => (vars && vars[k] != null ? String(vars[k]) : m)) : ''; };
+  const empty = v => v == null || v === '' || v === false || (Array.isArray(v) && v.length === 0);
+  const digits = s => String(s || '').replace(/\D/g, '');
+  const toMin = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + (m || 0); };
+  const pad2 = n => String(n).padStart(2, '0');
+  function fmtTime(hhmm, ns = 'hours') {
+    const [h0, m] = String(hhmm).split(':').map(Number); const h = h0 % 24;
+    const ap = T(`ui.${ns}.${h >= 12 ? 'pm' : 'am'}`); const h12 = h % 12 === 0 ? 12 : h % 12;
+    return m ? `${h12}:${pad2(m)} ${ap}` : `${h12} ${ap}`;
+  }
+  const waLink = (num, msg) => `https://wa.me/${digits(num)}${msg ? '?text=' + encodeURIComponent(msg) : ''}`;
+  function nowIn(tz) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})
+      .formatToParts(new Date()).map(p => [p.type, p.value]));
+    return {date: `${parts.year}-${parts.month}-${parts.day}`, day: parts.weekday.slice(0, 3).toLowerCase(), minutes: Number(parts.hour) * 60 + Number(parts.minute)};
+  }
+  function openStatus(byDay, tz) {
+    try {
+      const n = nowIn(tz), idx = DAYS.indexOf(n.day), now = n.minutes;
+      const t = byDay[n.day], y = byDay[DAYS[(idx + 6) % 7]];
+      if (y && !y.closed && toMin(y.close) <= toMin(y.open) && now < toMin(y.close)) return {open: true, text: T('ui.hours.open_until', {time: fmtTime(y.close)})};
+      if (t && !t.closed) {
+        const o = toMin(t.open), c = toMin(t.close);
+        if (c > o ? now >= o && now < c : now >= o) return {open: true, text: T('ui.hours.open_until', {time: fmtTime(t.close)})};
+        if (now < o) return {open: false, text: T('ui.hours.closed_opens', {time: fmtTime(t.open)})};
+      }
+      for (let k = 1; k <= 7; k++) {
+        const d = byDay[DAYS[(idx + k) % 7]];
+        if (d && !d.closed) return {open: false, text: T('ui.hours.closed_opens_day', {day: DAY_LABEL[d.day], time: fmtTime(d.open)})};
+      }
+    } catch (e) { /* timezone not supported */ }
+    return {open: false, text: T('ui.hours.fallback')};
+  }
+
+  /* ---------- CRM -> page model ---------- */
+  function buildModel(crm) {
+    const spa = crm.spa || {}, contact = crm.contact || {}, loc = crm.location || {}, booking = crm.booking || {};
+    const spaName = spa.short_name || spa.name || '';
+    const fillMsg = (tpl, service) => String(tpl || '').replace(/\{spa\}/g, spaName).replace(/\{service\}/g, service || '');
+    const message = fillMsg(contact.whatsapp_message);
+    /* no label from the CRM: UAE mobiles (+9715…) read "mobile", other UAE numbers "landline" */
+    const phoneLabel = p => p.label || (/^\+9715/.test(p.number || '') ? T('ui.contact.mobile') : /^\+971/.test(p.number || '') ? T('ui.contact.landline') : '');
+    const phones = (contact.phones || []).map((p, i) => ({
+      ...p, index: String(i),
+      kind: [phoneLabel(p), [p.calls && T('ui.contact.calls'), p.whatsapp && T('ui.contact.whatsapp')].filter(Boolean).join(T('ui.contact.and'))].filter(Boolean).join(' · ').toLowerCase()
+    }));
+    const waPhones = phones.filter(p => p.whatsapp);
+    const mainWa = contact.whatsapp_number || (waPhones[0] && waPhones[0].number) || '';
+    const callPhones = phones.filter(p => p.calls);
+    const primaryCall = callPhones.find(p => !p.whatsapp) || callPhones[0] || phones[0] || {};
+    const links = {
+      whatsapp: mainWa ? waLink(mainWa, message) : '',
+      maps: loc.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([loc.address_line1, loc.address_line2, loc.city, loc.country].filter(Boolean).join(', '))}`,
+      booking: booking.url || '#book'
+    };
+
+    const byDay = Object.fromEntries((crm.hours || []).map(h => [h.day, h]));
+    const sig = d => { const h = byDay[d]; return !h || h.closed ? 'closed' : `${h.open}-${h.close}`; };
+    const groups = [];
+    DAYS.forEach(d => {
+      const last = groups[groups.length - 1];
+      if (last && last.sig === sig(d)) last.to = d; else groups.push({sig: sig(d), from: d, to: d});
+    });
+    const rows = groups.map(g => {
+      const h = byDay[g.from];
+      return {days: g.from === g.to ? DAY_LABEL[g.from] : `${DAY_LABEL[g.from]} – ${DAY_LABEL[g.to]}`,
+              time: g.sig === 'closed' ? T('ui.hours.closed') : `${fmtTime(h.open)} – ${fmtTime(h.close)}`};
+    });
+    const openGroups = groups.filter(g => g.sig !== 'closed');
+    const openSigs = [...new Set(openGroups.map(g => g.sig))];
+    const sameEveryDay = groups.length === 1 && groups[0].sig !== 'closed';
+    const openDays = DAYS.filter(d => sig(d) !== 'closed');
+    const operatingDays = openDays.length === 7 ? T('ui.hours.every_day')
+      : openGroups.map(g => g.from === g.to ? DAY_LABEL[g.from] : `${DAY_LABEL[g.from]} – ${DAY_LABEL[g.to]}`).join(', ');
+    const workingHours = openSigs.length === 1 ? rows[groups.findIndex(g => g.sig !== 'closed')].time : (openSigs.length ? T('ui.hours.vary') : T('ui.hours.closed_all'));
+    const hoursLine = sameEveryDay ? T('ui.hours.open_daily', {time: rows[0].time}) : rows.map(r => `${r.days} ${r.time}`).join(' · ');
+    const fillText = s => String(s || '').replace(/\{hours\}/g, hoursLine).replace(/\{area\}/g, spa.area_label || '').replace(/\{city\}/g, loc.city || '');
+
+    const services = (crm.services || []).map(s => ({...s, durations: [...(s.durations || [])].map(Number).filter(n => n > 0).sort((a, b) => a - b)}));
+    const journey = (crm.journey || []).map(j => ({
+      id: j.id, label: j.label, still: j.image, clip: j.clip || null, clipMobile: j.clipMobile || null, focus: j.focus, accent: j.accent,
+      eyebrow: fillText(j.eyebrow), title: fillText(j.title), body: fillText(j.body),
+      tags: (j.tags || []).map(fillText),
+      cta: j.cta ? {primary: {label: booking.label || T('ui.cta.book_now'), href: links.booking}, secondary: {label: T('ui.cta.see_treatments'), href: '#treatments'}} : null,
+      scroll: j.cta ? 1.5 : 1.35, linger: .35
+    }));
+    /* team cards and the therapist select: only people with a photo (no empty frames) */
+    const staff = (crm.staff || []).filter(m => m && m.photo).map((m, i) => ({...m, id: m.id || `staff-${i + 1}`, alt: m.photo_alt || m.name || T('ui.staff.alt', {spa: spaName}), has_caption: !!(m.name || m.specialty)}));
+
+    return {
+      spa, booking, links, byDay, services, journey, staff, phones, waPhones, primaryCall, mainWa, message,
+      experience: (spa.experience || []).map((e, i) => ({...e, num: pad2(i + 1)})),
+      values: {
+        'spa-name': spa.name || '', 'city': loc.city || '', 'booking-label': booking.label || T('ui.cta.book_now'),
+        'year': String(new Date().getFullYear()), 'working-hours': workingHours, 'operating-days': operatingDays,
+        'address': [loc.address_line1, loc.address_line2, loc.city, loc.country].filter(Boolean).join(', '),
+        'address-line1': loc.address_line1 || '',
+        'hours-varies': !sameEveryDay && rows.length > 0 ? 'yes' : '',
+        'has-hours': (crm.hours || []).length ? 'yes' : '',
+        'logo-on-dark': spa.logo_on_dark || '', 'logo-on-light': spa.logo_on_light || '',
+        'experience-image': spa.experience_image || '', 'experience-image-alt': spa.experience_image_alt || '',
+        'booking-image': booking.image || '', 'booking-image-alt': booking.image_alt || ''
+      },
+      lists: {
+        'services': services, 'services-with-image': services.filter(s => s.image), 'staff': staff,
+        'phones': phones, 'whatsapp-phones': waPhones, 'hours-rows': rows,
+        'experience': (spa.experience || []).map((e, i) => ({...e, num: pad2(i + 1)}))
+      }
+    };
+  }
+
+  /* ---------- binder for the CRM attribute format ---------- */
+  function fillPlaceholders(node, item) {
+    const map = {'[service-id]': item.id, '[staff-id]': item.id, '[phone-index]': item.index};
+    [node, ...node.querySelectorAll('*')].forEach(el => {
+      for (const at of [...el.attributes]) if (at.value in map && map[at.value] != null) el.setAttribute(at.name, map[at.value]);
+    });
+  }
+  function bindItemFields(root, item) {
+    [root, ...root.querySelectorAll('*')].forEach(el => {
+      if (el.hasAttribute('data-if')) el.hidden = empty(get(item, el.getAttribute('data-if')));
+      if (el.hasAttribute('data-item')) el.textContent = get(item, el.getAttribute('data-item')) ?? '';
+      if (el.hasAttribute('data-item-src')) { const v = get(item, el.getAttribute('data-item-src')); if (v) el.src = v; }
+      if (el.hasAttribute('data-item-alt')) el.alt = get(item, el.getAttribute('data-item-alt')) || '';
+      if (el.hasAttribute('data-item-copy')) el.dataset.copy = get(item, el.getAttribute('data-item-copy')) || '';
+    });
+  }
+  function renderLists(model) {
+    document.querySelectorAll('[data-crm-list]').forEach(container => {
+      const tpl = container.querySelector(':scope > template');
+      if (!tpl) return;
+      [...container.children].forEach(c => { if (c !== tpl) c.remove(); });
+      const items = model.lists[container.getAttribute('data-crm-list')] || [];
+      const frag = document.createDocumentFragment();
+      items.forEach(item => {
+        const clone = tpl.content.cloneNode(true);
+        [...clone.children].forEach(ch => { fillPlaceholders(ch, item); bindItemFields(ch, item); });
+        frag.appendChild(clone);
+      });
+      container.insertBefore(frag, tpl);
+    });
+  }
+  function bindServices(model) {
+    const byId = Object.fromEntries(model.services.map(s => [s.id, s]));
+    document.querySelectorAll('[data-service-title]').forEach(el => { const s = byId[el.dataset.serviceTitle]; if (s) el.textContent = s.name; });
+    document.querySelectorAll('[data-service-description]').forEach(el => { const s = byId[el.dataset.serviceDescription]; el.textContent = (s && s.description) || ''; el.hidden = !(s && s.description); });
+    document.querySelectorAll('[data-service-price]').forEach(el => {
+      const s = byId[el.dataset.servicePrice]; const p = s ? s.price : null;
+      el.hidden = p == null || p === '';
+      if (!el.hidden) el.textContent = typeof p === 'number' ? T('ui.services.price_from', {price: p, currency: model.spa.currency || ''}).trim() : String(p);
+    });
+    document.querySelectorAll('[data-service-duration]').forEach(el => {
+      const s = byId[el.dataset.serviceDuration]; if (!s) return;
+      el.textContent = '';
+      if (s.durations.length) s.durations.forEach(m => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = T('ui.services.minutes', {n: m}); el.appendChild(c); });
+      else { const a = document.createElement('span'); a.className = 'ask'; a.textContent = T('ui.services.ask_timing'); el.appendChild(a); }
+    });
+  }
+  function bindValues(model) {
+    const phoneBy = Object.fromEntries(model.phones.map(p => [p.index, p]));
+    document.querySelectorAll('[data-crm]').forEach(el => {
+      const key = el.getAttribute('data-crm');
+      if (key === 'live-status') return;
+      if (key === 'phone') { const p = (el.dataset.phone != null && phoneBy[el.dataset.phone]) || model.primaryCall; el.textContent = p.display || ''; return; }
+      if (key === 'address' && el.tagName === 'A') { el.href = model.links.maps; return; }
+      if (key in model.values) el.textContent = model.values[key];
+    });
+    document.querySelectorAll('[data-crm-src]').forEach(el => { const k = el.getAttribute('data-crm-src'); const v = model.values[k]; if (v) el.src = v; el.alt = model.values[k + '-alt'] || model.spa.name || ''; });
+    document.querySelectorAll('[data-crm-aria]').forEach(el => el.setAttribute('aria-label', model.values[el.getAttribute('data-crm-aria')] || ''));
+    document.querySelectorAll('[data-if]').forEach(el => {
+      if (el.closest('template') || el.closest('[data-crm-list] > *')) return;
+      const k = el.getAttribute('data-if');
+      if (k in model.lists) el.hidden = !model.lists[k].length;
+      else if (k in model.values) el.hidden = empty(model.values[k]);
+    });
+    document.querySelectorAll('a[href="[crm-whatsapp-link]"]').forEach(a => {
+      const p = a.dataset.phone != null ? phoneBy[a.dataset.phone] : null;
+      const href = p ? waLink(p.number, model.message) : model.links.whatsapp;
+      if (href) a.href = href; else a.hidden = true;
+    });
+    document.querySelectorAll('a[href="[crm-booking-url]"]').forEach(a => {
+      a.href = model.links.booking;
+      if (/^https?:/.test(model.links.booking)) { a.target = '_blank'; a.rel = 'noopener'; }
+    });
+    document.querySelectorAll('a[href="[crm-maps-link]"]').forEach(a => { a.href = model.links.maps; });
+  }
+  function paintStatus(model) {
+    const st = openStatus(model.byDay, model.spa.timezone);
+    document.querySelectorAll('[data-crm="live-status"]').forEach(el => { el.textContent = st.text; el.classList.toggle('open', st.open); });
+  }
+  /* contract v2 markup texts: data-crm-text = the element's text, data-crm-attr = "attr:path; attr:path" (a missing
+     key keeps the markup, '' empties it); data-crm-tpl also fills {days} and {hours}, each in its own span as built */
+  function bindUi(model) {
+    const str = path => { const v = get(CRM, path); return typeof v === 'string' ? v : null; };
+    const vars = {days: model.values['operating-days'], hours: model.values['working-hours']};
+    document.querySelectorAll('[data-crm-text]').forEach(el => {
+      const v = str(el.getAttribute('data-crm-text'));
+      if (v == null) return;
+      el.textContent = el.hasAttribute('data-crm-tpl') ? '' : v;
+      if (el.hasAttribute('data-crm-tpl')) v.split(/(\{(?:days|hours)\})/).forEach(part => {
+        const k = /^\{(days|hours)\}$/.exec(part);
+        if (k) { const s = document.createElement('span'); s.textContent = vars[k[1]] || ''; el.appendChild(s); }
+        else if (part) el.appendChild(document.createTextNode(part));
+      });
+    });
+    document.querySelectorAll('[data-crm-attr]').forEach(el => el.getAttribute('data-crm-attr').split(';').forEach(part => {
+      const at = part.indexOf(':'), name = part.slice(0, at).trim(), v = at > 0 ? str(part.slice(at + 1).trim()) : null;
+      if (name && v != null) el.setAttribute(name, v);
+    }));
+  }
+
+  /* ---------- booking form (JSON POST to the CRM; WhatsApp fallback) ---------- */
+  function initBooking(model) {
+    const form = document.getElementById('bookingForm');
+    const f = id => document.getElementById(id);
+    const svcSel = f('bf-service'), durSel = f('bf-duration'), dateIn = f('bf-date'), timeSel = f('bf-time');
+    const status = f('bf-status'), submit = f('bf-submit');
+    const actionAttr = form.getAttribute('action');
+    const endpoint = actionAttr && !isPlaceholder(actionAttr) ? actionAttr : (model.booking.form_endpoint || '');
+    const opt = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; };
+
+    svcSel.appendChild(opt('', T('ui.form.choose_treatment')));
+    model.services.forEach(s => svcSel.appendChild(opt(s.id, s.name)));
+    const named = model.staff.filter(m => m.name);
+    if (named.length) {
+      f('bf-staff-field').hidden = false;
+      const st = f('bf-staff'); st.appendChild(opt('', T('ui.form.no_preference')));
+      named.forEach(m => st.appendChild(opt(m.id, m.specialty ? `${m.name} · ${m.specialty}` : m.name)));
+    }
+    function fillDurations() {
+      const s = model.services.find(x => x.id === svcSel.value);
+      durSel.textContent = '';
+      if (!s) { durSel.appendChild(opt('', T('ui.form.treatment_first'))); durSel.disabled = true; return; }
+      durSel.disabled = false;
+      if (s.durations.length) s.durations.forEach(m => durSel.appendChild(opt(String(m), T('ui.services.minutes', {n: m}))));
+      else durSel.appendChild(opt('', T('ui.form.we_advise')));
+    }
+    let today;
+    try { today = nowIn(model.spa.timezone); }
+    catch (e) { const d = new Date(); today = {date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, day: DAYS[(d.getDay() + 6) % 7], minutes: d.getHours() * 60 + d.getMinutes()}; }
+    dateIn.min = today.date;
+    const maxD = new Date(today.date + 'T12:00:00'); maxD.setDate(maxD.getDate() + 60);
+    dateIn.max = `${maxD.getFullYear()}-${pad2(maxD.getMonth() + 1)}-${pad2(maxD.getDate())}`;
+    function fillTimes() {
+      timeSel.textContent = '';
+      if (!dateIn.value) { timeSel.appendChild(opt('', T('ui.form.date_first'))); timeSel.disabled = true; return; }
+      const d = new Date(dateIn.value + 'T12:00:00');
+      const h = model.byDay[DAYS[(d.getDay() + 6) % 7]];
+      if (!h || h.closed) { timeSel.appendChild(opt('', T('ui.form.closed_day'))); timeSel.disabled = true; return; }
+      const o = toMin(h.open); let c = toMin(h.close); if (c <= o) c += 1440;
+      const len = Number(durSel.value) || 60;
+      const isToday = dateIn.value === today.date;
+      timeSel.disabled = false;
+      timeSel.appendChild(opt('', T('ui.form.choose_time')));
+      let any = false;
+      for (let m = o; m + len <= c; m += 30) {
+        if (isToday && m <= today.minutes + 30) continue;
+        const v = `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
+        timeSel.appendChild(opt(v, fmtTime(v) + (m >= 1440 ? T('ui.form.after_midnight') : '')));
+        any = true;
+      }
+      if (!any) { timeSel.textContent = ''; timeSel.appendChild(opt('', T('ui.form.no_times'))); timeSel.disabled = true; }
+    }
+    function setErr(name, msg) { const e = form.querySelector(`[data-err="${name}"]`); if (e) { e.textContent = msg; e.closest('.field').classList.add('bad'); } }
+    function clearErr(name) { const e = form.querySelector(`[data-err="${name}"]`); if (e) { e.textContent = ''; e.closest('.field').classList.remove('bad'); } }
+    svcSel.addEventListener('change', () => { fillDurations(); fillTimes(); clearErr('service_id'); });
+    durSel.addEventListener('change', fillTimes);
+    dateIn.addEventListener('change', () => { fillTimes(); clearErr('date'); });
+    timeSel.addEventListener('change', () => clearErr('time'));
+    form.querySelectorAll('input').forEach(i => i.addEventListener('input', () => clearErr(i.name)));
+    fillDurations(); fillTimes();
+
+    /* "Book →" on a treatment row: preselect it in the form (when the CRM has no external booking URL) */
+    document.querySelectorAll('[data-book-service]').forEach(a => a.addEventListener('click', () => {
+      if (/^https?:/.test(model.links.booking)) return;
+      svcSel.value = a.dataset.bookService; fillDurations(); fillTimes(); clearErr('service_id');
+      setTimeout(() => svcSel.focus({preventScroll: true}), 1100);
+    }));
+
+    function validate(v) {
+      let ok = true;
+      if (!v.service_id) { setErr('service_id', T('ui.form.err_service')); ok = false; }
+      if (!v.date) { setErr('date', T('ui.form.err_date')); ok = false; }
+      if (!v.time) { setErr('time', T('ui.form.err_time')); ok = false; }
+      if (v.name.trim().length < 2) { setErr('name', T('ui.form.err_name')); ok = false; }
+      if (digits(v.phone).length < 9) { setErr('phone', T('ui.form.err_phone')); ok = false; }
+      return ok;
+    }
+    function summary(v, s) {
+      /* the WhatsApp message the spa's staff read: ui.wa.* (English on every page) */
+      return [T('ui.wa.intro', {spa: model.spa.short_name || model.spa.name}),
+        `${s ? s.name : ''}${v.duration_minutes ? T('ui.wa.minutes', {n: v.duration_minutes}) : ''} · ${T(v.guests === '2' ? 'ui.wa.guests_2' : 'ui.wa.guests_1', {n: v.guests})}`,
+        T('ui.wa.when', {date: v.date, time: fmtTime(v.time, 'wa')}), T('ui.wa.name', {name: v.name}), T('ui.wa.phone', {phone: v.phone}), v.notes ? T('ui.wa.notes', {notes: v.notes}) : ''].filter(Boolean).join('\n');
+    }
+    function showStatus(kind, title, text, waText) {
+      status.hidden = false; status.className = 'form-status ' + kind; status.textContent = '';
+      const b = document.createElement('b'); b.textContent = title; status.appendChild(b);
+      const p = document.createElement('p'); p.textContent = text; status.appendChild(p);
+      if (waText && model.mainWa) {
+        const a = document.createElement('a'); a.className = 'pill solid'; a.target = '_blank'; a.rel = 'noopener';
+        a.href = waLink(model.mainWa, waText); a.textContent = T('ui.form.send_whatsapp');
+        a.style.width = 'max-content'; a.style.maxWidth = '100%';
+        status.appendChild(a);
+      }
+    }
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const v = Object.fromEntries(['service_id', 'duration_minutes', 'date', 'time', 'guests', 'staff_id', 'name', 'phone', 'notes'].map(k => [k, String(fd.get(k) || '')]));
+      if (!validate(v)) { const bad = form.querySelector('.field.bad input, .field.bad select'); if (bad) bad.focus(); return; }
+      const s = model.services.find(x => x.id === v.service_id);
+      const payload = {
+        spa: model.spa.name, service_id: v.service_id, service_name: s ? s.name : '',
+        duration_minutes: v.duration_minutes ? Number(v.duration_minutes) : null, guests: Number(v.guests) || 1,
+        date: v.date, time: v.time, staff_id: v.staff_id || null,
+        name: v.name.trim(), phone: v.phone.trim(), notes: v.notes.trim(), source: 'website', submitted_at: new Date().toISOString()
+      };
+      if (!endpoint) { showStatus('ok', T('ui.form.almost_title'), T('ui.form.almost_text'), summary(v, s)); return; }
+      submit.disabled = true; submit.textContent = T('ui.form.sending');
+      try {
+        const res = await fetch(endpoint, {method: 'POST', headers: {'Content-Type': 'application/json', Accept: 'application/json'}, body: JSON.stringify(payload)});
+        if (!res.ok) throw new Error('status ' + res.status);
+        form.querySelectorAll('input:not([type=radio]), textarea').forEach(i => { i.value = ''; });
+        svcSel.value = ''; fillDurations(); fillTimes();
+        showStatus('ok', T('ui.form.ok_title'), T('ui.form.ok_text', {name: payload.name, phone: payload.phone}));
+      } catch (err) {
+        console.error(err);
+        showStatus('fail', T('ui.form.fail_title'), T('ui.form.fail_text'), summary(v, s));
+      } finally {
+        submit.disabled = false; submit.textContent = T('ui.form.submit');
+      }
+    });
+  }
+
+  /* ---------- team: drifting 3D carousel ---------- */
+  function initOrbit() {
+    const orbit = document.getElementById('orbit'), track = document.getElementById('orbitTrack');
+    const originals = [...track.querySelectorAll(':scope > .tcard')];
+    if (!originals.length) return {frame() {}};
+    if (reduce) { orbit.classList.add('static'); return {frame() {}}; }
+    let cards = [], setW = 0, offset = 0, vel = 0, hover = false, drag = null;
+    const BASE = 38;
+    function build() {
+      track.querySelectorAll('.tcard[data-clone]').forEach(c => c.remove());
+      const gap = parseFloat(getComputedStyle(track).columnGap) || 28;
+      setW = originals.reduce((w, c) => w + c.getBoundingClientRect().width + gap, 0);
+      let total = setW, n = 0;
+      while (total < setW + orbit.clientWidth + 500 && n < 6) {
+        originals.forEach(c => { const k = c.cloneNode(true); k.dataset.clone = ''; k.setAttribute('aria-hidden', 'true'); track.insertBefore(k, track.querySelector('template')); });
+        total += setW; n++;
+      }
+      cards = [...track.querySelectorAll(':scope > .tcard')].map(c => ({el: c, left: c.offsetLeft, w: c.offsetWidth}));
+    }
+    build();
+    addEventListener('resize', build);
+    orbit.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') hover = true; });
+    orbit.addEventListener('pointerleave', () => { hover = false; });
+    orbit.addEventListener('pointerdown', e => { drag = {x: e.clientX, t: performance.now(), id: e.pointerId}; orbit.classList.add('dragging'); });
+    addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x, now = performance.now(), dt = Math.max(1, now - drag.t);
+      offset -= dx; vel = -dx / dt * 1000; drag.x = e.clientX; drag.t = now;
+    });
+    const end = () => { if (!drag) return; drag = null; orbit.classList.remove('dragging'); };
+    addEventListener('pointerup', end); addEventListener('pointercancel', end);
+    document.getElementById('prev').onclick = () => { vel = -1100; };
+    document.getElementById('next').onclick = () => { vel = 1100; };
+    function frame(t, dt) {
+      if (!drag) { const target = hover ? 0 : BASE; vel += (target - vel) * Math.min(1, dt * 2.2); offset += vel * dt; }
+      offset = ((offset % setW) + setW) % setW;
+      track.style.transform = `translate3d(${-offset}px,0,0)`;
+      const ow = orbit.clientWidth, mid = ow / 2;
+      for (const c of cards) {
+        const center = c.left + c.w / 2 - offset;
+        if (center < -c.w || center > ow + c.w) continue;
+        const d = clamp((center - mid) / mid, -1.4, 1.4), ad = Math.abs(d);
+        const lift = Math.sin(t * .9 + c.left * .01) * 7;
+        c.el.style.transform = `translate3d(0,${(ad * 22 + lift).toFixed(1)}px,${(-ad * 200).toFixed(1)}px) rotateY(${(-d * 24).toFixed(2)}deg)`;
+        c.el.style.opacity = (1 - Math.max(0, ad - .9) * 1.2).toFixed(3);
+      }
+    }
+    return {frame};
+  }
+
+  function initReveal() {
+    if (reduce || !('IntersectionObserver' in window)) return;
+    const els = [...document.querySelectorAll('[data-reveal]')].filter(e => e.getBoundingClientRect().top > innerHeight);
+    els.forEach(e => e.classList.add('rv'));
+    requestAnimationFrame(() => els.forEach(e => e.classList.add('rv-on')));
+    const io = new IntersectionObserver(entries => entries.forEach(en => {
+      if (en.isIntersecting) { en.target.classList.remove('rv'); io.unobserve(en.target); }
+    }), {threshold: .08, rootMargin: '0px 0px -6% 0px'});
+    els.forEach(e => io.observe(e));
+  }
+
+  function initSpy(getJourneyEnd) {
+    const nav = document.getElementById('nav');
+    const links = [...document.querySelectorAll('#navLinks a[data-spy]')];
+    const ids = links.map(a => a.dataset.spy).filter(id => id !== 'top');
+    function update() {
+      const y = scrollY;
+      nav.classList.toggle('solid', y > getJourneyEnd() - 40);
+      let active = 'top';
+      if (y >= getJourneyEnd() - innerHeight * .3) {
+        ids.forEach(id => { const el = document.getElementById(id); if (el && !el.hidden && el.getBoundingClientRect().top < innerHeight * .4) active = id; });
+      }
+      links.forEach(a => a.classList.toggle('active', a.dataset.spy === active));
+    }
+    addEventListener('scroll', update, {passive: true});
+    update();
+  }
+
+  function wireStatic(model) {
+    const imgs = [...document.querySelectorAll('#treatVisual img[data-key]')];
+    const rows = [...document.querySelectorAll('#treatList .treat-row')];
+    const setActive = key => {
+      if (!imgs.some(i => i.dataset.key === key)) return;
+      imgs.forEach(i => i.classList.toggle('off', i.dataset.key !== key));
+      rows.forEach(r => r.classList.toggle('active', r.dataset.key === key));
+    };
+    rows.forEach(r => {
+      r.addEventListener('pointerenter', () => setActive(r.dataset.key));
+      r.addEventListener('focusin', () => setActive(r.dataset.key));
+    });
+    if (model.lists['services-with-image'][0]) setActive(model.lists['services-with-image'][0].id);
+    if (!imgs.length) document.getElementById('treatVisual').hidden = true;
+    document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
+      const reset = t => { b.textContent = t; setTimeout(() => b.textContent = T('ui.contact.copy'), 1600); };
+      const fallback = () => { const s = getSelection(), r = document.createRange(); r.selectNodeContents(b.parentElement.querySelector('b')); s.removeAllRanges(); s.addRange(r); reset(T('ui.contact.selected')); };
+      try { navigator.clipboard.writeText(b.dataset.copy).then(() => reset(T('ui.contact.copied')), fallback); } catch (e) { fallback(); }
+    }));
+  }
+
+  /* ---------- master loop ---------- */
+  let orbit = {frame() {}};
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    glide.frame(now);
+    ambient.frame(now / 1000, dt);
+    orbit.frame(now / 1000, dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  /* ---------- load CRM data ---------- */
+  async function loadCRM() {
+    if (window.CRM_DATA) return window.CRM_DATA;
+    const endpoint = document.querySelector('meta[name="crm-endpoint"]').content;
+    const res = await fetch(endpoint, {headers: {Accept: 'application/json'}, cache: 'no-store'});
+    if (!res.ok) throw new Error('CRM request failed: ' + res.status);
+    return res.json();
+  }
+  loadCRM().then(crm => {
+    CRM = crm || {};
+    if (CRM.locale === 'ar') document.documentElement.lang = 'ar';   /* the language only: the layout stays as built (no RTL) */
+    DAYS.forEach(d => { DAY_LABEL[d] = T('ui.hours.days.' + d); });
+    const model = buildModel(crm);
+    renderLists(model);
+    bindServices(model);
+    bindValues(model);
+    bindUi(model);
+    paintStatus(model);
+    setInterval(() => paintStatus(model), 60000);
+    const world = mountScrollWorld(document.getElementById('world'), {
+      sections: model.journey, connectors: [], diveScroll: 1.35, crossfade: .16, hint: T('ui.hint'), sceneLabel: T('ui.aria.scene'),
+      scrollTo: y => glide.to(y)
+    });
+    wireStatic(model);
+    initBooking(model);
+    orbit = initOrbit();
+    initReveal();
+    initSpy(() => world ? world.endY() : 0);
+    rootEl.classList.remove('crm-loading');
+  }).catch(err => {
+    console.error(err);
+    rootEl.classList.remove('crm-loading');
+    document.getElementById('crmError').hidden = false;
+  });
+})();
+</script>
+
+</body>
+</html>

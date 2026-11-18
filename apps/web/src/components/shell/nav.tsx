@@ -1,0 +1,252 @@
+'use client'
+import {
+  BadgeDollarSign,
+  BellRing,
+  Boxes,
+  Building2,
+  Calculator,
+  CalendarDays,
+  ChartColumn,
+  Contact,
+  Ellipsis,
+  FileBadge,
+  Gift,
+  Globe,
+  HandHeart,
+  House,
+  Images,
+  Inbox,
+  Landmark,
+  Layers,
+  LayoutTemplate,
+  Mail,
+  Megaphone,
+  MessageCircle,
+  MessagesSquare,
+  PanelsTopLeft,
+  ReceiptText,
+  ScrollText,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  ToggleRight,
+  UserCog,
+  UserRound,
+  Users,
+  Wallet,
+} from 'lucide-react'
+import { motion } from 'motion/react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Fragment, useState } from 'react'
+import { useT } from '@/i18n/client'
+import { spring } from '@/lib/motion'
+import { cn } from '@/lib/utils'
+import { Sheet } from '../ui/sheet'
+
+const icons = {
+  home: House,
+  team: Users,
+  roles: ShieldCheck,
+  settings: Settings2,
+  billing: ReceiptText,
+  account: UserRound,
+  tenants: Building2,
+  plans: Layers,
+  ai: Sparkles,
+  audit: ScrollText,
+  company: Landmark,
+  calendar: CalendarDays,
+  clients: Contact,
+  sales: Wallet,
+  messages: MessageCircle,
+  services: HandHeart,
+  staff: UserCog,
+  website: Globe,
+  analytics: ChartColumn,
+  accounts: Calculator,
+  packages: Gift,
+  payroll: BadgeDollarSign,
+  inventory: Boxes,
+  inbox: MessagesSquare,
+  campaigns: Megaphone,
+  media: Images,
+  documents: FileBadge,
+  templates: LayoutTemplate,
+  studio: PanelsTopLeft,
+  applications: Inbox,
+  enquiries: Mail,
+  flags: ToggleRight,
+  announcements: BellRing,
+} as const
+
+export type NavItem = {
+  href: string
+  label: string
+  icon: keyof typeof icons
+  exact?: boolean
+  /** Section heading shown above the first item of each group. */
+  group?: string
+  /** Count pill (e.g. pending spa applications); hidden when 0. */
+  badge?: number
+}
+
+function CountPill({ n, className }: { n?: number; className?: string }) {
+  if (!n) return null
+  return (
+    <span
+      className={cn(
+        'tabular min-w-5 rounded-full bg-accent px-1.5 text-center text-[11px] leading-5 font-semibold text-accent-fg',
+        className,
+      )}
+    >
+      {n}
+    </span>
+  )
+}
+
+function useActive() {
+  const pathname = usePathname()
+  return (item: NavItem) => {
+    // Pathnames here are the public ones (host rewrites are invisible to the client).
+    if (item.exact) return pathname === item.href
+    return pathname === item.href || pathname.startsWith(`${item.href}/`)
+  }
+}
+
+export function SidebarNav({ items }: { items: NavItem[] }) {
+  const isActive = useActive()
+  return (
+    <nav className="flex min-h-0 flex-1 flex-col gap-0.5">
+      {items.map((item, i) => {
+        const Icon = icons[item.icon]
+        const active = isActive(item)
+        const heading = item.group && item.group !== items[i - 1]?.group ? item.group : null
+        return (
+          <Fragment key={item.href}>
+            {heading && (
+              <p className="mt-4 mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/80 first:mt-0 md:hidden lg:block">
+                {heading}
+              </p>
+            )}
+            {heading && i > 0 && (
+              <span className="mx-3 my-2 hidden border-t md:block lg:hidden" aria-hidden />
+            )}
+            <Link
+              href={item.href}
+              title={item.label}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'relative flex max-h-10 min-h-6 flex-[1_1_0] items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
+                active ? 'text-fg' : 'text-muted hover:bg-subtle/70 hover:text-fg',
+              )}
+            >
+              {active && (
+                <motion.span
+                  layoutId="sidebar-active"
+                  transition={spring}
+                  className="absolute inset-0 rounded-lg bg-subtle"
+                />
+              )}
+              <Icon className="relative size-[18px] shrink-0" strokeWidth={1.5} />
+              <span className="relative md:hidden lg:inline">{item.label}</span>
+              <CountPill
+                n={item.badge}
+                className="relative ms-auto md:absolute md:end-1 md:top-0.5 lg:static lg:ms-auto"
+              />
+            </Link>
+          </Fragment>
+        )
+      })}
+    </nav>
+  )
+}
+
+export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }) {
+  const isActive = useActive()
+  const [open, setOpen] = useState(false)
+  const t = useT()
+  const moreActive = more.some(isActive)
+  // Counts of the items inside "More" show on its tab too (phones see no sidebar).
+  const moreBadge = more.reduce((n, item) => n + (item.badge ?? 0), 0)
+  const tab = (
+    key: string,
+    active: boolean,
+    Icon: (typeof icons)[keyof typeof icons],
+    label: string,
+    badge?: number,
+  ) => (
+    <span
+      className={cn(
+        'relative flex flex-col items-center gap-1 py-1.5 text-[11px] transition-colors',
+        active ? 'text-fg' : 'text-muted',
+      )}
+    >
+      {active && (
+        <motion.span
+          layoutId="bottom-active"
+          transition={spring}
+          className="absolute -top-2 h-0.5 w-8 rounded-full bg-accent"
+        />
+      )}
+      <Icon className="size-5" strokeWidth={1.5} />
+      {label}
+      <CountPill n={badge} className="absolute -top-0.5 end-[calc(50%-1.25rem)]" />
+      <span className="sr-only">{key}</span>
+    </span>
+  )
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-surface/90 pb-safe backdrop-blur-md md:hidden">
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${items.length + (more.length ? 1 : 0)}, minmax(0, 1fr))` }}
+      >
+        {items.map((item) => (
+          <Link key={item.href} href={item.href} className="pt-2">
+            {tab(item.href, isActive(item), icons[item.icon], item.label, item.badge)}
+          </Link>
+        ))}
+        {more.length > 0 && (
+          <Sheet
+            open={open}
+            onOpenChange={setOpen}
+            title={t('ui.more')}
+            trigger={
+              <button type="button" className="pt-2">
+                {tab('more', moreActive, Ellipsis, t('ui.more'), moreBadge)}
+              </button>
+            }
+          >
+            <div className="grid gap-1">
+              {more.map((item, i) => {
+                const Icon = icons[item.icon]
+                const heading = item.group && item.group !== more[i - 1]?.group ? item.group : null
+                return (
+                  <Fragment key={item.href}>
+                    {heading && (
+                      <p className="mt-3 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted first:mt-0">
+                        {heading}
+                      </p>
+                    )}
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        'flex h-12 items-center gap-3 rounded-lg px-3 text-[15px] hover:bg-subtle',
+                        isActive(item) && 'bg-subtle',
+                      )}
+                    >
+                      <Icon className="size-5 text-muted" strokeWidth={1.5} />
+                      {item.label}
+                      <CountPill n={item.badge} className="ms-auto" />
+                    </Link>
+                  </Fragment>
+                )
+              })}
+            </div>
+          </Sheet>
+        )}
+      </div>
+    </nav>
+  )
+}

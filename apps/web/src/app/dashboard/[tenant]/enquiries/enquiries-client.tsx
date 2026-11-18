@@ -1,0 +1,107 @@
+'use client'
+// F15 Inbox → Enquiries row actions: "Reply on WhatsApp" opens a click-to-send wa.me link (the spa sends it from its
+// own WhatsApp) and marks the enquiry replied; Mark replied / Close / Reopen. A booking request: "Make booking" opens
+// the calendar's New booking prefilled; once booked, "Booked" links to the booking (owner 2026-10-13).
+import { CalendarCheck, CalendarPlus, Check, MessageCircle, RotateCcw, X } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { useT } from '@/i18n/client'
+import { useConfirmAction } from '../services/services-client'
+import { setEnquiryStatusAction } from './actions'
+
+export function EnquiryActions({
+  slug,
+  id,
+  name,
+  status,
+  replyHref,
+  canManage,
+  bookHref = null,
+  booked = false,
+  bookedHref = null,
+  compact = false,
+}: {
+  slug: string
+  id: string
+  name: string
+  status: 'new' | 'replied' | 'closed'
+  /** wa.me link with the start of the reply (null without phone access). */
+  replyHref: string | null
+  canManage: boolean
+  /** The calendar's New booking prefilled from this booking request (null: not one, booked, or no permission). */
+  bookHref?: string | null
+  booked?: boolean
+  /** The booking in the calendar (null without calendar access). */
+  bookedHref?: string | null
+  /** R36 dashboard card: Make booking / Booked / Reply only (no Mark replied, Close, Reopen), start-aligned. */
+  compact?: boolean
+}) {
+  const t = useT()
+  const router = useRouter()
+  const { pending, run } = useConfirmAction()
+  const move = (to: 'new' | 'replied' | 'closed') =>
+    run(
+      null,
+      () => setEnquiryStatusAction(slug, id, to),
+      () => router.refresh(),
+    )
+  return (
+    <span className={compact ? 'flex flex-wrap gap-2' : 'flex flex-wrap justify-end gap-2'}>
+      {bookHref && (
+        <Button size="sm" variant="secondary" asChild>
+          <Link href={bookHref} aria-label={t('enquiries.make.label', { name })} data-enquiry-book="">
+            <CalendarPlus /> {t('enquiries.make.button')}
+          </Link>
+        </Button>
+      )}
+      {booked &&
+        (bookedHref ? (
+          <Button size="sm" variant="ghost" asChild>
+            <Link
+              href={bookedHref}
+              aria-label={t('enquiries.make.bookedLabel', { name })}
+              data-enquiry-booked=""
+            >
+              <CalendarCheck /> {t('enquiries.make.booked')}
+            </Link>
+          </Button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-sm" data-enquiry-booked="">
+            <CalendarCheck className="size-4" /> {t('enquiries.make.booked')}
+          </span>
+        ))}
+      {replyHref && (
+        <Button size="sm" asChild>
+          <a
+            href={replyHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('enquiries.replyLabel', { name })}
+            data-enquiry-reply=""
+            onClick={() => {
+              if (canManage && status === 'new') move('replied')
+            }}
+          >
+            <MessageCircle /> {t('enquiries.reply')}
+          </a>
+        </Button>
+      )}
+      {!compact && canManage && status === 'new' && (
+        <Button size="sm" variant="secondary" pending={pending} onClick={() => move('replied')}>
+          <Check /> {t('enquiries.markReplied')}
+        </Button>
+      )}
+      {!compact && canManage && status !== 'closed' && (
+        <Button size="sm" variant="ghost" pending={pending} onClick={() => move('closed')}>
+          <X /> {t('enquiries.close')}
+        </Button>
+      )}
+      {!compact && canManage && status === 'closed' && (
+        <Button size="sm" variant="ghost" pending={pending} onClick={() => move('new')}>
+          <RotateCcw /> {t('enquiries.reopen')}
+        </Button>
+      )}
+    </span>
+  )
+}

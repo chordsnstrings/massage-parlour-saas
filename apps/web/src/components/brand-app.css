@@ -1,0 +1,126 @@
+/* Platform app look (owner R13, PLAN §14.8): the super-admin console (AppShell) and the sign-in / sign-up pages
+   (AuthLayout) wear the marketing site's "C · Bold product-led" design (app/marketing/marketing.css, scoped .mkt):
+   Space Grotesk headings, DM Sans text, near-black + #0F6B4B green + lime, 12px buttons, 18px cards, dark bands.
+   Scope: any page that renders a `.mkt-app` root. Tokens sit on :root:has(.mkt-app) so Radix portals (menus, sheets,
+   toasts) match too, and win over globals.css (light only, like marketing). The spa CRM (.crm) and the public spa
+   sites never render .mkt-app, so they are untouched. The UI kit reads these tokens and its --ui-* hooks. */
+:root:has(.mkt-app) {
+  color-scheme: light;
+  --bg: #f6f6f9;
+  --surface: #ffffff;
+  --subtle: #f1f1f4;
+  --border: #e6e6ec;
+  --fg: #0b0b0f;
+  --muted: #5a5a66;
+  --accent: #0f6b4b;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3f1ea;
+  --success: #0f6b4b;
+  --success-soft: #e3f1ea;
+  --warning: #8a5a00;
+  --warning-soft: #fff4d6;
+  --danger: #b4432a;
+  --danger-soft: #fbeadf;
+  --ease-calm: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --mkt-head: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, sans-serif;
+  --mkt-font: "DM Sans Variable", "DM Sans", ui-sans-serif, sans-serif;
+  --mkt-dark: #0b0b0f;
+  --mkt-dark-card: #17171d;
+  --mkt-dark-text: #c2c2cc;
+  --mkt-lime: #d9f26a;
+  /* UI kit hooks (components/ui/*) */
+  --ui-btn-radius: 12px;
+  --ui-btn-fw: 600;
+  --ui-btn-h: 2.75rem;
+  --ui-btn-h-sm: 2.25rem;
+  --ui-btn-px: 1.25rem;
+  --ui-btn-h-lg: 3.25rem;
+  --ui-btn-px-lg: 1.5rem;
+  --ui-btn-fs-lg: 16px;
+  --ui-btn-shadow: 0 12px 28px -14px rgb(15 107 75 / 0.7);
+  --ui-ctl-radius: 10px;
+  --ui-ctl-h: 2.75rem;
+  --ui-card-radius: 18px;
+  --ui-sheet-radius: 22px;
+  --ui-toast-radius: 12px;
+  --ui-pill-fw: 600;
+  --ui-title-fs: 28px;
+  --ui-title-fs-sm: 36px;
+  --ui-stat-fs: 30px;
+  font-family: var(--mkt-font);
+  font-feature-settings: normal;
+  background: var(--bg);
+}
+:root:has(.mkt-app) body {
+  font-family: var(--mkt-font);
+  background: var(--bg);
+}
+:root:has(.mkt-app) :is(h1, h2, h3, [class*="--ui-stat-fs"]) {
+  font-family: var(--mkt-head);
+  letter-spacing: -0.025em;
+}
+:root:has(.mkt-app) h1 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Dark band (marketing .mkt-dark): near-black ground, #17171D cards, #C2C2CC text, lime accents, slow green glow. */
+.mkt-app-dark {
+  --surface: var(--mkt-dark-card);
+  --subtle: rgb(255 255 255 / 0.08);
+  --border: rgb(255 255 255 / 0.08);
+  --fg: #ffffff;
+  --muted: var(--mkt-dark-text);
+  --accent: var(--mkt-lime);
+  --accent-fg: var(--mkt-dark);
+  --accent-soft: rgb(217 242 106 / 0.16);
+  background: var(--mkt-dark);
+  color: #fff;
+  color-scheme: dark;
+}
+/* Clipped panel with the slow green glow: the auth side panel, and the console's sticky sidebar panel (on the
+   panel, not the full-height aside: an overflow:hidden aside would become the scroll box and stop the sticking). */
+.mkt-app-glow {
+  isolation: isolate;
+  overflow: hidden;
+}
+.mkt-app-glow::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset-block-start: -30%;
+  inset-inline-start: -40%;
+  width: 120%;
+  aspect-ratio: 1;
+  max-width: 900px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(15 107 75 / 0.55), transparent 70%);
+  pointer-events: none;
+  animation: mkt-app-drift 28s ease-in-out infinite alternate;
+}
+@keyframes mkt-app-drift {
+  to {
+    transform: translate(18%, 22%) scale(1.1);
+  }
+}
+/* lime pill (marketing eyebrow chip) */
+.mkt-app-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--mkt-lime);
+  color: var(--mkt-dark);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* lime bar on top of the active sidebar item (marketing .mkt-lbar) */
+.mkt-app-dark nav a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 25%;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--mkt-lime);
+}

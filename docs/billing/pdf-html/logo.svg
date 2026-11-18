@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1250" height="480" viewBox="0 0 1250 480" role="img" aria-label="Spa Management diagonal SM logo">
+  <rect x="76" y="62" width="332" height="332" rx="88" fill="#D9F26A" transform="rotate(-7 242 228)"/>
+  <text x="101" y="287" fill="#17181A" font-family="Helvetica Neue, Arial, sans-serif" font-size="198" font-style="italic" font-weight="700" letter-spacing="-32">SM</text>
+  <path d="M116 327h244" stroke="#F7F3EA" stroke-width="18" stroke-linecap="round"/>
+  <g fill="#17181A" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700"><text x="470" y="205" font-size="132" letter-spacing="-5">Spa</text><text x="470" y="347" font-size="132" letter-spacing="-6">Management</text></g>
+</svg>

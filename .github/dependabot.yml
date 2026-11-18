@@ -1,0 +1,51 @@
+# F25: weekly dependency PRs. Minor + patch updates come as one grouped PR per ecosystem; majors one PR each.
+# Stack pins (CLAUDE.md "Stack pins") are upgraded deliberately, never by a bot: their majors are ignored, and for
+# 0.x / minor-pinned packages (drizzle 0.45.x, Better Auth 1.7, Puck 0.23) their minors too. These ignores also hold
+# back security updates that need such a bump: CI's `pnpm audit` flags those, and the upgrade is done by hand.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Asia/Dubai
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: next # Next.js 16
+        update-types: [version-update:semver-major]
+      - dependency-name: drizzle-orm # 0.45.x (not the 1.0 beta)
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: drizzle-kit # paired with drizzle-orm 0.45
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: better-auth # 1.7
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "@better-auth/*" # released together with better-auth
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "@puckeditor/core" # ^0.23
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: pg-boss # 12
+        update-types: [version-update:semver-major]
+      - dependency-name: motion # 14
+        update-types: [version-update:semver-major]
+      - dependency-name: tailwindcss # Tailwind 4
+        update-types: [version-update:semver-major]
+      - dependency-name: "@tailwindcss/*"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node" # Node 22 (engines >= 22.12)
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Asia/Dubai
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,27 @@
+/* Pinning exists only once the head script has added "scenes-on" (before first paint),
+   so there is no layout shift on hydration and reduced-motion / no-JS visitors get today's page. */
+.scenes-on [data-scene][data-pin] {
+  height: calc(var(--len, 300) * 1svh);
+}
+/* parts waiting off to the side must not widen the page; clip (unlike hidden) keeps sticky working */
+.scenes-on [data-scene]:not([data-scene="reveal"]) {
+  overflow-x: clip;
+}
+.scenes-on [data-scene][data-pin] > [data-stage] {
+  position: sticky;
+  top: var(--scene-top, 0px); /* height of a sticky site header, if there is one */
+  height: calc(100svh - var(--scene-top, 0px));
+  align-content: center; /* centres block content without changing its layout */
+}
+@media (max-width: 620px) {
+  .scenes-on [data-scene][data-pin] {
+    height: calc(var(--len-phone, var(--len, 300)) * 1svh);
+  }
+  .scenes-on [data-scene][data-pin="wide"] {
+    height: auto;
+  }
+  .scenes-on [data-scene][data-pin="wide"] > [data-stage] {
+    position: static;
+    height: auto;
+  }
+}

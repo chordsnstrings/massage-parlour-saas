@@ -1,0 +1,216 @@
+/*
+ * F24 status pages (404 / error / global error), one per surface look: `crm` (spa dashboard, crm.css palette),
+ * `marketing` (marketing.css palette), `console` (super-admin, globals.css palette) and `site` (spa sites: theme-neutral,
+ * no platform branding). Self-contained on purpose: they also render when a surface layout (and its CSS) failed, and
+ * global-error renders without the root layout. Logical properties only (Arabic is RTL). Light only.
+ */
+.sp-status {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+  margin: 0;
+  background: var(--sp-bg);
+  color: var(--sp-text);
+  font-family: var(--sp-font);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.sp-status *,
+.sp-status *::before,
+.sp-status *::after {
+  box-sizing: border-box;
+}
+.sp-status__card {
+  width: 100%;
+  max-width: 460px;
+  text-align: center;
+  padding: var(--sp-pad, 0);
+  background: var(--sp-card, transparent);
+  border-radius: var(--sp-radius, 0);
+  box-shadow: var(--sp-shadow, none);
+}
+.sp-status__brand {
+  display: flex;
+  justify-content: center;
+  margin-block-end: 28px;
+}
+.sp-status__brand > * {
+  height: 40px;
+  width: auto;
+}
+.sp-status__code {
+  display: inline-block;
+  margin: 0 0 16px;
+  font-family: var(--sp-head);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--sp-code-ink, var(--sp-muted));
+  background: var(--sp-code-bg, transparent);
+  border-radius: 999px;
+  padding: var(--sp-code-pad, 0);
+  font-size: var(--sp-code-size, 14px);
+  line-height: 1.1;
+}
+.sp-status__title {
+  margin: 0;
+  font-family: var(--sp-head);
+  font-weight: 650;
+  font-size: var(--sp-title-size, 24px);
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--sp-text);
+}
+.sp-status__body {
+  margin: 10px 0 0;
+  font-size: 15px;
+  color: var(--sp-muted);
+}
+.sp-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-block-start: 28px;
+}
+.sp-status__ref {
+  margin: 22px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--sp-muted);
+  overflow-wrap: anywhere;
+}
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: var(--sp-btn-radius, 10px);
+  border: 1px solid var(--sp-primary);
+  background: var(--sp-primary);
+  color: var(--sp-on-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.sp-btn:hover {
+  background: var(--sp-primary-hover);
+  border-color: var(--sp-primary-hover);
+}
+.sp-btn:focus-visible {
+  outline: 3px solid var(--sp-focus);
+  outline-offset: 2px;
+}
+.sp-btn--ghost {
+  background: transparent;
+  color: var(--sp-text);
+  border-color: var(--sp-line);
+}
+.sp-btn--ghost:hover {
+  background: var(--sp-ghost-hover);
+  border-color: var(--sp-line);
+}
+
+/* Spa dashboard: mint/cream, white card, dark-green primary, lime only for the small code pill. */
+.sp-status[data-look="crm"] {
+  --sp-bg: linear-gradient(180deg, #e7efe6 0%, #f8faf5 70%);
+  --sp-text: #111a15;
+  --sp-muted: #59645d;
+  --sp-font: "DM Sans Variable", "Noto Sans Thai Variable", ui-sans-serif, system-ui, sans-serif;
+  --sp-head:
+    "Space Grotesk Variable", "DM Sans Variable", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
+  --sp-card: #ffffff;
+  --sp-pad: 36px 28px;
+  --sp-radius: 18px;
+  --sp-shadow: 0 1px 2px rgb(17 40 28 / 0.04), 0 20px 60px rgb(17 40 28 / 0.1);
+  --sp-code-bg: #d9f26a;
+  --sp-code-ink: #1d2a06;
+  --sp-code-pad: 5px 12px;
+  --sp-code-size: 13px;
+  --sp-title-size: 22px;
+  --sp-primary: #0f6b4b;
+  --sp-primary-hover: #0a4f37;
+  --sp-on-primary: #ffffff;
+  --sp-line: rgb(17 40 28 / 0.14);
+  --sp-ghost-hover: #f5f7f2;
+  --sp-focus: rgb(15 107 75 / 0.35);
+}
+
+/* Marketing: white ground, near-black type, big Space Grotesk code with a lime mark, green primary. */
+.sp-status[data-look="marketing"] {
+  --sp-bg: #ffffff;
+  --sp-text: #0b0b0f;
+  --sp-muted: #3a3a44;
+  --sp-font: "DM Sans Variable", "DM Sans", ui-sans-serif, sans-serif;
+  --sp-head: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, sans-serif;
+  --sp-code-size: clamp(72px, 18vw, 112px);
+  --sp-code-ink: #0b0b0f;
+  --sp-title-size: clamp(24px, 5vw, 32px);
+  --sp-primary: #0f6b4b;
+  --sp-primary-hover: #0a4f37;
+  --sp-on-primary: #ffffff;
+  --sp-btn-radius: 999px;
+  --sp-line: rgba(11, 11, 15, 0.14);
+  --sp-ghost-hover: #f1f1f4;
+  --sp-focus: rgba(15, 107, 75, 0.35);
+}
+.sp-status[data-look="marketing"] .sp-status__code {
+  letter-spacing: -0.04em;
+  background: linear-gradient(transparent 62%, #d9f26a 62%, #d9f26a 88%, transparent 88%);
+  border-radius: 0;
+  padding: 0 6px;
+}
+
+/* Super-admin console: minimal Swedish modern (globals.css palette). */
+.sp-status[data-look="console"] {
+  --sp-bg: #fafaf8;
+  --sp-text: #1c1c1a;
+  --sp-muted: #6b6a66;
+  --sp-font: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --sp-head: var(--sp-font);
+  --sp-title-size: 22px;
+  --sp-primary: #1c1c1a;
+  --sp-primary-hover: #000000;
+  --sp-on-primary: #ffffff;
+  --sp-btn-radius: 8px;
+  --sp-line: #e7e5e0;
+  --sp-ghost-hover: #f2f1ed;
+  --sp-focus: rgba(94, 125, 107, 0.45);
+}
+
+/* Spa sites: theme-neutral (each spa has its own theme; none is loaded here), no platform branding. */
+.sp-status[data-look="site"] {
+  --sp-bg: #faf9f7;
+  --sp-text: #1f1e1c;
+  --sp-muted: #67645f;
+  --sp-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif;
+  --sp-head: var(--sp-font);
+  --sp-code-size: 13px;
+  --sp-code-pad: 4px 12px;
+  --sp-code-bg: #efece7;
+  --sp-code-ink: #67645f;
+  --sp-title-size: 26px;
+  --sp-primary: #1f1e1c;
+  --sp-primary-hover: #000000;
+  --sp-on-primary: #ffffff;
+  --sp-btn-radius: 999px;
+  --sp-line: #dcd8d1;
+  --sp-ghost-hover: #f1efeb;
+  --sp-focus: rgba(31, 30, 28, 0.3);
+}
+.sp-status[data-look="site"] .sp-status__name {
+  margin: 0 0 22px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--sp-text);
+}

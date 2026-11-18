@@ -1,0 +1,22 @@
+name: Cloudflare IP ranges
+
+# F26: the Caddyfile trusts Cf-Connecting-Ip only from Cloudflare's edge ranges. This fails when Cloudflare publishes a
+# change; fix with `deploy/droplet/cloudflare-ips.sh --write` and commit. Not part of CI's deploy gate: a stale list
+# only makes visitors behind a new Cloudflare range share that edge's rate-limit bucket until it is updated.
+on:
+  schedule:
+    - cron: "41 4 * * 1" # Mondays 04:41 UTC
+  pull_request:
+    paths: [deploy/droplet/Caddyfile, deploy/droplet/cloudflare-ips.sh]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ranges:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash deploy/droplet/cloudflare-ips.sh
